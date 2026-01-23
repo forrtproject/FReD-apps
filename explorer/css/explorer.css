@@ -1,0 +1,351 @@
+/* FReD Explorer - Specific Styles */
+
+/* Override DataTables defaults */
+.dataTables_wrapper .dataTables_filter {
+  margin-bottom: 1rem;
+}
+
+.dataTables_wrapper .dataTables_info {
+  padding-top: 1rem;
+  color: var(--fred-text-muted);
+}
+
+.dataTables_wrapper .dataTables_paginate {
+  padding-top: 1rem;
+}
+
+/* Make tables responsive */
+.dataTables_wrapper {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+/* DataTables dark mode support */
+[data-theme="dark"] table.dataTable {
+  color: var(--fred-text);
+}
+
+[data-theme="dark"] table.dataTable thead th {
+  background: var(--fred-bg-alt);
+  border-bottom-color: var(--fred-border);
+  color: var(--fred-text);
+}
+
+[data-theme="dark"] table.dataTable tbody td {
+  border-bottom-color: var(--fred-border);
+}
+
+[data-theme="dark"] table.dataTable tbody tr:hover {
+  background-color: var(--fred-bg-alt);
+}
+
+[data-theme="dark"] .dataTables_wrapper .dataTables_filter input,
+[data-theme="dark"] .dataTables_wrapper .dataTables_length select {
+  background: var(--fred-bg-card);
+  color: var(--fred-text);
+  border-color: var(--fred-border);
+}
+
+[data-theme="dark"] .dataTables_paginate .paginate_button {
+  color: var(--fred-text) !important;
+  border-color: var(--fred-border);
+}
+
+[data-theme="dark"] .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) {
+  background: var(--fred-bg-alt);
+  color: var(--fred-text) !important;
+}
+
+[data-theme="dark"] .dataTables_paginate .paginate_button.current {
+  background: var(--fred-primary) !important;
+  color: white !important;
+  border-color: var(--fred-primary);
+}
+
+[data-theme="dark"] .dataTables_paginate .paginate_button.disabled {
+  color: var(--fred-text-muted) !important;
+}
+
+/* Ensure tooltips aren't clipped */
+table.dataTable {
+  overflow: visible;
+}
+
+table.dataTable tbody {
+  overflow: visible;
+}
+
+table.dataTable tbody tr {
+  overflow: visible;
+}
+
+table.dataTable tbody td {
+  overflow: visible;
+}
+
+/* Scatterplot specific */
+#scatterplot {
+  min-height: 500px;
+}
+
+/* Forest plot scroll container */
+#forestplot {
+  max-height: 800px;
+  overflow-y: auto;
+}
+
+/* Radio group compact styling */
+.radio-group {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.radio-option label {
+  line-height: 1.3;
+}
+
+/* Legend styling for plots */
+.plotly .legend {
+  font-size: 12px !important;
+}
+
+/* Card headers with buttons */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-header .btn-group {
+  margin-left: auto;
+}
+
+/* Study count badge */
+#filter-stats {
+  font-size: 0.875rem;
+}
+
+#study-count {
+  font-weight: 600;
+  color: var(--fred-primary);
+}
+
+/* Success note styling */
+.success-note {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--fred-bg-alt);
+  border-radius: 4px;
+  border-left: 3px solid var(--fred-primary);
+}
+
+.success-note:empty {
+  display: none;
+}
+
+/* Table cell truncation */
+#studies-table td:nth-child(2),
+#full-data-table td:first-child {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Reference columns - Author (Year) format with tooltip */
+#studies-table td:nth-child(5),
+#studies-table td:nth-child(6) {
+  white-space: nowrap;
+}
+
+/* Reference tooltip styling */
+.ref-tooltip {
+  cursor: help;
+  border-bottom: 1px dotted var(--fred-text-muted);
+}
+
+.ref-tooltip:hover {
+  color: var(--fred-primary);
+  border-bottom-color: var(--fred-primary);
+}
+
+/* JS-powered tooltip (appended to body) */
+.tooltip-popup {
+  position: fixed;
+  background: var(--fred-primary);
+  color: white;
+  padding: 0.75rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  white-space: normal;
+  max-width: 450px;
+  line-height: 1.4;
+  z-index: 10000;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  pointer-events: auto;
+}
+
+[data-theme="dark"] .tooltip-popup {
+  background: #3A3E40;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+
+.tooltip-text {
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255,255,255,0.2);
+}
+
+.tooltip-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.tooltip-btn {
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: background 0.15s;
+}
+
+.tooltip-btn:hover {
+  background: rgba(255,255,255,0.25);
+  color: white;
+}
+
+.tooltip-copy {
+  min-width: 70px;
+}
+
+.tooltip-link {
+  color: #8FD8FF;
+}
+
+.tooltip-link:hover {
+  color: white;
+}
+
+/* Highlight selected rows */
+table.dataTable tbody tr.selected {
+  background-color: rgba(166, 40, 40, 0.1) !important;
+}
+
+/* Link styling in tables */
+table.dataTable a {
+  color: var(--fred-primary);
+}
+
+/* Details expand button */
+.details-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  line-height: 1;
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+td.dt-control {
+  text-align: center;
+  cursor: pointer;
+}
+
+tr.shown td.dt-control .details-btn {
+  background-color: var(--fred-primary);
+  color: white;
+}
+
+/* Study details expanded row */
+.study-details h5 {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.study-details table td {
+  padding: 0.25rem 0;
+}
+
+/* Plot loading state */
+.plot-container.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fred-bg-alt);
+}
+
+/* Decade chart specific */
+#decade-chart {
+  min-height: 350px;
+}
+
+/* Journal chart - needs more height for labels */
+#journal-chart {
+  min-height: 600px;
+}
+
+/* Tab content transitions */
+.tab-content {
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .sidebar {
+    margin-bottom: 1rem;
+  }
+
+  .radio-group {
+    max-height: none;
+  }
+
+  #scatterplot,
+  #forestplot,
+  #decade-chart,
+  #journal-chart {
+    min-height: 300px;
+  }
+
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .card-header .btn-group {
+    margin-left: 0;
+  }
+}
+
+/* Print-specific */
+@media print {
+  .page-header {
+    background: white !important;
+    color: black !important;
+    border-bottom: 2px solid var(--fred-primary);
+  }
+
+  .card {
+    break-inside: avoid;
+  }
+
+  .plot-container {
+    min-height: auto !important;
+    max-height: none !important;
+  }
+}

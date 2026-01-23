@@ -1,0 +1,70 @@
+# GitHub Actions workflow for FReD Static Apps
+# Runs weekly to refresh JSON data files from the FReD database
+
+name: Update FReD Static Data
+
+on:
+  # Run weekly on Sundays at 2:00 AM UTC
+  schedule:
+    - cron: '0 2 * * 0'
+
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+          use-public-rspm: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev
+
+      - name: Install R packages
+        run: |
+          Rscript -e 'install.packages(c("remotes", "dplyr", "jsonlite", "stringr"))'
+          Rscript -e 'remotes::install_github("forrtproject/FReD")'
+
+      - name: Run preprocessing scripts
+        run: |
+          cd preprocessing
+          Rscript process-explorer-data.R ../data
+          Rscript process-flora-data.R ../data
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          git diff --quiet data/ || echo "changes=true" >> $GITHUB_OUTPUT
+
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.changes == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add data/
+          git commit -m "Update FReD static data - $(date -u +'%Y-%m-%d')"
+          git push
+
+      - name: Report status
+        run: |
+          echo "Data update complete!"
+          ls -la data/
+          echo "Explorer data size: $(du -h data/explorer-data.json | cut -f1)"
+          echo "Flora data size: $(du -h data/flora-data.json | cut -f1)"

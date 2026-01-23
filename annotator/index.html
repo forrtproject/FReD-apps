@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FReD Annotator - Annotate Reading Lists</title>
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="../shared/css/theme.css">
+  <link rel="stylesheet" href="css/annotator.css">
+
+  <!-- DataTables CSS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+  <link rel="stylesheet" href="https://cdn.datatables.net/select/1.7.0/css/select.dataTables.min.css">
+
+  <!-- Plotly -->
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+  <!-- Header -->
+  <header class="page-header">
+    <div class="container">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <img src="https://forrt.org/author/forrt/avatar_hu8bc9dda6369ea35e3d2850cf7115c3e5_11296_270x270_fill_q100_h2_lanczos_center_2.webp" alt="FORRT Logo" style="height: 50px; border-radius: 8px;">
+          <div>
+            <h1 style="margin: 0;">FReD Annotator</h1>
+            <p style="margin: 0; opacity: 0.9; font-size: 0.9rem;">Annotate Reading Lists with Replication Information</p>
+          </div>
+        </div>
+        <nav class="header-nav">
+          <a href="../index.html" class="header-nav-link">Home</a>
+          <a href="../explorer/index.html" class="header-nav-link">Explorer</a>
+          <button class="theme-toggle" title="Toggle dark/light mode">
+            <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+            <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+          </button>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" data-tab="input">Input References</button>
+      <button class="tab" data-tab="selection">Study Selection</button>
+      <button class="tab" data-tab="report">Report</button>
+    </div>
+
+    <!-- Tab: Input References -->
+    <div class="tab-content active" id="tab-input">
+      <div class="card">
+        <div class="card-header">Enter or Upload References</div>
+        <div class="card-body">
+          <p>Paste references with DOIs or upload a file (PDF, .bib, .ris, or .txt) to identify which studies have been replicated.</p>
+
+          <!-- Text Input -->
+          <div class="form-group">
+            <label class="form-label" for="reference-input">Paste references or DOIs</label>
+            <textarea
+              id="reference-input"
+              class="form-control"
+              rows="8"
+              placeholder="Paste references here. Each line can contain a DOI (e.g., 10.1234/example) or a full reference with embedded DOI.
+
+Example:
+Smith, J. (2020). Study title. Journal Name. https://doi.org/10.1234/example
+10.5678/another-doi"
+            ></textarea>
+          </div>
+
+          <!-- File Upload -->
+          <div class="form-group">
+            <label class="form-label" for="file-upload">Or upload a file</label>
+            <input type="file" id="file-upload" class="form-control" accept=".pdf,.bib,.ris,.txt">
+            <small class="text-muted">Supported formats: PDF, BibTeX (.bib), RIS (.ris), plain text (.txt)</small>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="btn-group mt-2">
+            <button class="btn btn-primary" id="btn-process">Process References</button>
+            <button class="btn btn-secondary" id="btn-clear">Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- DOI Preview -->
+      <div class="card" id="doi-preview-card" style="display: none;">
+        <div class="card-header">
+          Extracted DOIs
+          <button class="btn btn-sm btn-secondary" id="btn-toggle-dois">Show/Hide</button>
+        </div>
+        <div class="card-body" id="doi-preview-body" style="display: none;">
+          <pre id="doi-list" style="max-height: 200px; overflow-y: auto;"></pre>
+          <button class="btn btn-sm btn-secondary" id="btn-copy-dois">Copy DOIs</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Study Selection -->
+    <div class="tab-content" id="tab-selection">
+      <div class="card">
+        <div class="card-header">
+          Studies Found in FReD
+          <div class="form-group" style="display: inline-block; margin-left: 1rem; margin-bottom: 0;">
+            <label class="form-label" style="display: inline; margin-right: 0.5rem;">Success Criterion:</label>
+            <select id="success-criterion" class="form-control" style="width: auto; display: inline-block;">
+              <option value="significance_r" selected>Significance of Replication</option>
+              <option value="significance_agg">Aggregated Significance</option>
+              <option value="consistency_ci">Consistency with CI</option>
+              <option value="consistency_pi">Consistency with PI</option>
+              <option value="homogeneity">Homogeneity</option>
+              <option value="homogeneity_significance">Homogeneity & Significance</option>
+              <option value="small_telescopes">Small Telescopes</option>
+            </select>
+          </div>
+        </div>
+        <div class="card-body">
+          <!-- Coverage Chart -->
+          <div class="plot-container" id="coverage-chart" style="min-height: 100px;"></div>
+
+          <!-- Results Table -->
+          <table id="results-table" class="display" style="width:100%">
+            <thead>
+              <tr>
+                <th>Original DOI</th>
+                <th>Replication DOI</th>
+                <th>Description</th>
+                <th>ES (Orig)</th>
+                <th>ES (Rep)</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+
+          <!-- Outcome Chart -->
+          <div class="plot-container" id="outcome-chart" style="min-height: 200px; margin-top: 1rem;"></div>
+        </div>
+      </div>
+
+      <!-- Database Browser -->
+      <div class="card">
+        <div class="card-header">Browse FReD Database</div>
+        <div class="card-body">
+          <p class="text-muted">Select additional studies to include in your report.</p>
+          <table id="database-table" class="display" style="width:100%">
+            <thead>
+              <tr>
+                <th>DOI</th>
+                <th>Reference</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Report -->
+    <div class="tab-content" id="tab-report">
+      <div class="card">
+        <div class="card-header">
+          Replication Report
+          <div class="btn-group">
+            <button class="btn btn-sm btn-secondary" id="btn-copy-report">Copy HTML</button>
+            <button class="btn btn-sm btn-secondary" id="btn-toggle-markdown">Show Markdown</button>
+            <button class="btn btn-sm btn-primary" id="btn-print">Print / Save PDF</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="report-container" class="report-view"></div>
+          <pre id="markdown-source" style="display: none; max-height: 400px; overflow-y: auto; background: #f5f5f5; padding: 1rem;"></pre>
+        </div>
+      </div>
+
+      <!-- Replicability Plot -->
+      <div class="card">
+        <div class="card-header">Effect Size Comparison</div>
+        <div class="card-body">
+          <div class="plot-container" id="replicability-plot"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer style="background: var(--fred-bg-alt); padding: 1rem 0; margin-top: 2rem; text-align: center; color: var(--fred-text-muted);">
+    <div class="container">
+      <p>FReD Annotator | <a href="https://forrt.org" target="_blank">FORRT</a> | Data last updated: <span id="data-updated">Loading...</span></p>
+    </div>
+  </footer>
+
+  <!-- Welcome Modal -->
+  <div class="modal-overlay" id="welcome-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Welcome to FReD Annotator</h3>
+        <button class="modal-close" onclick="document.getElementById('welcome-modal').classList.remove('active')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>
+          The <strong>FReD Annotator</strong> helps you identify which studies in your reading list
+          have been replicated and what the outcomes were.
+        </p>
+        <h4>How to use:</h4>
+        <ol>
+          <li><strong>Input References:</strong> Paste references with DOIs or upload a file</li>
+          <li><strong>Study Selection:</strong> Review matched studies and select additional ones</li>
+          <li><strong>Report:</strong> Generate an annotated report to share or save</li>
+        </ol>
+        <h4>Legend</h4>
+        <ul style="list-style: none; padding-left: 0;">
+          <li><span style="color: darkgreen;">&#x2714;</span> <strong>Success:</strong> All replications succeeded</li>
+          <li><span style="color: darkred;">&#x2716;</span> <strong>Failure:</strong> All replications failed</li>
+          <li>&#x2753; <strong>Mixed:</strong> Mixed results across replications</li>
+          <li>&#x2754; <strong>N/A:</strong> Original study not significant</li>
+          <li>&#x270F; <strong>Not Coded:</strong> Outcome not yet coded</li>
+        </ul>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="document.getElementById('welcome-modal').classList.remove('active')">Get Started</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/select/1.7.0/js/dataTables.select.min.js"></script>
+
+  <!-- FReD Scripts -->
+  <script src="../shared/js/utils.js"></script>
+  <script src="../shared/js/theme-toggle.js"></script>
+  <script src="../shared/js/success-criteria.js"></script>
+  <script src="../shared/js/data-loader.js"></script>
+  <script src="js/doi-parser.js"></script>
+  <script src="js/report-generator.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

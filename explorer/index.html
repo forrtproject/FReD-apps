@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FReD Explorer - FORRT Replication Database</title>
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="../shared/css/theme.css">
+  <link rel="stylesheet" href="css/explorer.css">
+
+  <!-- DataTables CSS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+  <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
+
+  <!-- Plotly -->
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+  <!-- Header -->
+  <header class="page-header">
+    <div class="container">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <img src="https://forrt.org/author/forrt/avatar_hu8bc9dda6369ea35e3d2850cf7115c3e5_11296_270x270_fill_q100_h2_lanczos_center_2.webp" alt="FORRT Logo" style="height: 50px; border-radius: 8px;">
+          <div>
+            <h1 style="margin: 0;">FReD Explorer</h1>
+            <p style="margin: 0; opacity: 0.9; font-size: 0.9rem;">FORRT Replication Database</p>
+          </div>
+        </div>
+        <nav class="header-nav">
+          <a href="../index.html" class="header-nav-link">Home</a>
+          <a href="#" class="header-nav-link" id="about-link">About</a>
+          <a href="../annotator/index.html" class="header-nav-link">Annotator</a>
+          <button class="theme-toggle" title="Toggle dark/light mode">
+            <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+            <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+          </button>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+    <div class="sidebar-layout">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <!-- Navigation -->
+        <nav class="sidebar-nav">
+          <div class="sidebar-nav-title">Navigation</div>
+          <ul class="sidebar-nav-list">
+            <li class="sidebar-nav-item">
+              <button class="sidebar-nav-link active" data-tab="overview">Overview</button>
+            </li>
+            <li class="sidebar-nav-item">
+              <button class="sidebar-nav-link" data-tab="forest">Forest Plot</button>
+            </li>
+            <li class="sidebar-nav-item">
+              <button class="sidebar-nav-link" data-tab="correlates">Correlates</button>
+            </li>
+            <li class="sidebar-nav-item">
+              <button class="sidebar-nav-link" data-tab="data">Data</button>
+            </li>
+          </ul>
+        </nav>
+
+        <!-- Data Controls -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Data Controls</div>
+
+          <!-- Search -->
+          <div class="form-group">
+            <label class="form-label" for="search">Search</label>
+            <input type="text" id="search" class="form-control" placeholder="Search studies...">
+          </div>
+
+          <!-- Minimum Power -->
+          <div class="form-group">
+            <label class="form-label" for="minpower">Minimum Power</label>
+            <input type="range" id="minpower" class="form-range" min="0.05" max="0.999" step="0.01" value="0.05">
+            <div class="range-value" id="minpower-value">5%</div>
+          </div>
+
+          <!-- Success Criterion - now a dropdown -->
+          <div class="form-group">
+            <label class="form-label" for="success-criterion">
+              Success Criterion
+              <a href="https://forrt.org/FReD/articles/success_criteria.html" target="_blank" class="info-icon" title="Learn about success criteria">?</a>
+            </label>
+            <select id="success-criterion" class="form-control">
+              <option value="significance_r" selected>Significance of Replication</option>
+              <option value="significance_agg">Aggregated Significance</option>
+              <option value="consistency_ci">Consistency with CI</option>
+              <option value="consistency_pi">Consistency with PI</option>
+              <option value="homogeneity">Homogeneity</option>
+              <option value="homogeneity_significance">Homogeneity & Significance</option>
+              <option value="small_telescopes">Small Telescopes</option>
+              <option value="reported_success">Reported Success</option>
+            </select>
+          </div>
+
+          <!-- Source - hidden until proper source data is available -->
+          <div class="form-group" id="source-filter" style="display: none;">
+            <label class="form-label" for="source">Source Project</label>
+            <select id="source" class="form-control">
+              <option value="All studies">All studies</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Effect Count -->
+        <div class="effect-count">
+          <div style="font-size: 0.8125rem; color: var(--fred-text-muted); margin-bottom: 0.25rem;">Effects</div>
+          <div class="effect-count-number" id="study-count">0</div>
+        </div>
+      </aside>
+
+      <!-- Main Content Area -->
+      <div class="main-content">
+        <!-- Tab Content: Overview -->
+        <div class="tab-content active" id="tab-overview">
+          <!-- Outcome Distribution - at the top -->
+          <div class="card">
+            <div class="card-header" style="display: block;"><strong>Outcome Distribution</strong> <span id="outcome-count" style="font-weight: normal;"></span></div>
+            <div class="card-body" style="padding: 0.5rem 1rem;">
+              <div id="barchart" style="height: 80px;"></div>
+            </div>
+          </div>
+
+          <!-- Success Note -->
+          <div class="success-note" id="success-note"></div>
+
+          <!-- Scatterplot -->
+          <div class="card">
+            <div class="card-header">Effect Size Comparison</div>
+            <div class="card-body">
+              <div class="plot-container" id="scatterplot"></div>
+              <p class="text-muted text-center" style="margin-top: 0.5rem; font-size: 0.875rem;">
+                Rug plots: <span style="color: #4DCCD0;">teal</span> = significant, <span style="color: #FA948C;">coral</span> = not significant
+              </p>
+            </div>
+          </div>
+
+          <!-- Data Table -->
+          <div class="card">
+            <div class="card-header">
+              Effects
+              <div class="btn-group" style="float: right;">
+                <button class="btn btn-sm btn-secondary" id="btn-copy">Copy</button>
+                <button class="btn btn-sm btn-secondary" id="btn-csv">CSV</button>
+                <button class="btn btn-sm btn-secondary" id="btn-excel">Excel</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <table id="studies-table" class="display" style="width:100%">
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>Description</th>
+                    <th>Tags</th>
+                    <th>Result</th>
+                    <th>Original Reference</th>
+                    <th>Replication Reference</th>
+                    <th>Link</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab Content: Forest Plot -->
+        <div class="tab-content" id="tab-forest">
+          <div class="card">
+            <div class="card-header">Forest Plot (Blobbogram)</div>
+            <div class="card-body">
+              <p class="text-muted">Grey dots = original effect sizes. Black dots = replication effect sizes.</p>
+              <div class="plot-container" id="forestplot" style="min-height: 600px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab Content: Correlates -->
+        <div class="tab-content" id="tab-correlates">
+          <div class="card">
+            <div class="card-header">Outcomes by Decade</div>
+            <div class="card-body">
+              <div class="plot-container" id="decade-chart"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">Outcomes by Journal</div>
+            <div class="card-body">
+              <div class="plot-container" id="journal-chart" style="min-height: 600px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab Content: Data -->
+        <div class="tab-content" id="tab-data">
+          <div class="card">
+            <div class="card-header">
+              Full Dataset
+              <button class="btn btn-sm btn-primary" id="btn-download" style="float: right;">Download Excel</button>
+            </div>
+            <div class="card-body">
+              <table id="full-data-table" class="display" style="width:100%">
+                <thead>
+                  <tr>
+                    <th>Description</th>
+                    <th>ES (Orig)</th>
+                    <th>ES (Rep)</th>
+                    <th>N (Orig)</th>
+                    <th>N (Rep)</th>
+                    <th>Power</th>
+                    <th>Result</th>
+                    <th>Source</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- About Modal -->
+  <div class="modal-overlay" id="about-modal">
+    <div class="modal" style="max-width: 700px;">
+      <div class="modal-header">
+        <h3>About FReD Explorer</h3>
+        <button class="modal-close" onclick="document.getElementById('about-modal').classList.remove('active')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>
+          The <strong>FORRT Replication Database (FReD)</strong> is a comprehensive collection of
+          replication studies in psychology and related fields. This Explorer app allows you to
+          browse, filter, and visualize replication outcomes using various success criteria.
+        </p>
+
+        <h4>Success Criteria</h4>
+        <p>FReD supports multiple criteria for assessing replication success:</p>
+        <ul>
+          <li><strong>Significance of Replication:</strong> Whether the replication effect is statistically significant in the same direction.</li>
+          <li><strong>Aggregated Significance:</strong> Whether the meta-analytic combination of original and replication is significant.</li>
+          <li><strong>Consistency with CI:</strong> Whether the original effect falls within the replication's confidence interval.</li>
+          <li><strong>Consistency with PI:</strong> Whether the replication falls within the prediction interval.</li>
+          <li><strong>Homogeneity:</strong> Whether original and replication effects are statistically homogeneous.</li>
+          <li><strong>Homogeneity & Significance:</strong> Combined assessment of homogeneity and significance.</li>
+          <li><strong>Small Telescopes:</strong> Whether the replication exceeds the effect giving 33% power to the original.</li>
+          <li><strong>Reported Success:</strong> The outcome as reported in the replication study.</li>
+        </ul>
+
+        <p><a href="https://forrt.org/FReD/articles/success_criteria.html" target="_blank">Learn more about success criteria &rarr;</a></p>
+
+        <h4>Citation</h4>
+        <p id="citation" class="text-muted">Loading citation...</p>
+
+        <h4>Links</h4>
+        <ul>
+          <li><a href="https://forrt.org/replication-database/" target="_blank">FReD Website</a></li>
+          <li><a href="https://github.com/forrtproject/FReD" target="_blank">FReD R Package</a></li>
+          <li><a href="https://osf.io/9r62x/" target="_blank">FReD on OSF</a></li>
+        </ul>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="document.getElementById('about-modal').classList.remove('active')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer style="background: var(--fred-bg-alt); padding: 1rem 0; margin-top: 2rem; text-align: center; color: var(--fred-text-muted);">
+    <div class="container">
+      <p>FReD Explorer | <a href="https://forrt.org" target="_blank">FORRT</a> | Data last updated: <span id="data-updated">Loading...</span></p>
+    </div>
+  </footer>
+
+  <!-- Welcome Modal -->
+  <div class="modal-overlay" id="welcome-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Welcome to FReD Explorer</h3>
+        <button class="modal-close" onclick="document.getElementById('welcome-modal').classList.remove('active')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>
+          The <strong>FORRT Replication Database (FReD)</strong> Explorer allows you to browse and
+          analyze replication studies across psychology and related fields.
+        </p>
+        <p>
+          Use the filters on the left to narrow down studies by source project, statistical power,
+          or search terms. Select different success criteria to see how outcomes vary based on
+          different definitions of replication success.
+        </p>
+        <p>
+          <strong>Note:</strong> This is a static version of the FReD Explorer. For the full
+          interactive experience with real-time calculations, use the
+          <a href="https://github.com/forrtproject/FReD" target="_blank">FReD R package</a>.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="document.getElementById('welcome-modal').classList.remove('active')">Get Started</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <!-- FReD Scripts -->
+  <script src="../shared/js/utils.js"></script>
+  <script src="../shared/js/theme-toggle.js"></script>
+  <script src="../shared/js/success-criteria.js"></script>
+  <script src="../shared/js/data-loader.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/filters.js"></script>
+  <script src="js/charts/scatterplot.js"></script>
+  <script src="js/charts/barchart.js"></script>
+  <script src="js/charts/forestplot.js"></script>
+  <script src="js/charts/trends.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

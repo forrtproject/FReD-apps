@@ -1,0 +1,20 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# R files
+.Rhistory
+.RData
+.Rproj.user/
+
+# Node (if ever used)
+node_modules/
+
+# Local testing
+*.local
