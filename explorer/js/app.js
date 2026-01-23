@@ -55,6 +55,30 @@ FReD.explorer = {
       console.error('Failed to load data:', error);
       FReD.utils.showNotification('Failed to load data. Please try refreshing the page.', 'error');
     }
+
+    // Load citation
+    this.loadCitation();
+  },
+
+  /**
+   * Load citation from FReD-data repo
+   */
+  async loadCitation() {
+    const citationEl = document.getElementById('citation');
+    if (!citationEl) return;
+
+    try {
+      const response = await fetch('https://raw.githubusercontent.com/forrtproject/FReD-data/refs/heads/main/output/citation.txt');
+      if (response.ok) {
+        const citation = await response.text();
+        citationEl.textContent = citation.trim();
+      } else {
+        citationEl.textContent = 'Citation unavailable.';
+      }
+    } catch (error) {
+      console.error('Failed to load citation:', error);
+      citationEl.textContent = 'Citation unavailable.';
+    }
   },
 
   /**
