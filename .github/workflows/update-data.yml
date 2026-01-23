@@ -39,7 +39,7 @@ jobs:
 
       - name: Install R packages
         run: |
-          Rscript -e 'install.packages(c("remotes", "dplyr", "jsonlite", "stringr"))'
+          Rscript -e 'install.packages(c("remotes", "dplyr", "jsonlite", "stringr", "readr"))'
           Rscript -e 'remotes::install_github("forrtproject/FReD")'
 
       - name: Run preprocessing scripts

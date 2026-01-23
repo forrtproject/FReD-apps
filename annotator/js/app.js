@@ -16,9 +16,6 @@ FReD.annotator = {
   resultsTable: null,
   databaseTable: null,
 
-  // Current criterion
-  criterion: 'significance_r',
-
   /**
    * Initialize the application
    */
@@ -101,13 +98,6 @@ FReD.annotator = {
     document.getElementById('btn-copy-dois')?.addEventListener('click', () => {
       const dois = [...this.selectedDOIs].join('\n');
       FReD.utils.copyToClipboard(dois);
-    });
-
-    // Success criterion change
-    document.getElementById('success-criterion')?.addEventListener('change', (e) => {
-      this.criterion = e.target.value;
-      this.updateResults();
-      this.updateReport();
     });
 
     // Report buttons
@@ -255,7 +245,8 @@ FReD.annotator = {
           this.matchedStudies.push({
             doi_original: entry.doi_original,
             ref_original: entry.ref_original,
-            retracted_original: entry.retracted_original,
+            title_original: entry.title_original,
+            year_original: entry.year_original,
             ...rep
           });
         });
@@ -302,19 +293,22 @@ FReD.annotator = {
   },
 
   /**
-   * Update results table
+   * Update results table - simplified for FLoRA data
    */
   updateResultsTable() {
     const tableData = this.matchedStudies.map(study => {
-      const { outcomeReport } = FReD.successCriteria.getOutcome(study, this.criterion);
+      // Format outcome with color
+      const outcome = study.outcome || 'Not coded';
+      const outcomeClass = this.getOutcomeClass(outcome);
 
       return [
-        study.doi_original ? `<a href="https://doi.org/${study.doi_original}" target="_blank">${study.doi_original}</a>` : '',
-        study.doi_replication ? `<a href="https://doi.org/${study.doi_replication}" target="_blank">${study.doi_replication}</a>` : '',
-        FReD.utils.escapeHtml(study.description || ''),
-        FReD.utils.formatNumber(study.es_original, 3),
-        FReD.utils.formatNumber(study.es_replication, 3),
-        FReD.utils.capFirstLetter(outcomeReport || 'Not calculable')
+        study.ref_original
+          ? `<span title="${FReD.utils.escapeHtml(study.ref_original)}">${study.doi_original ? `<a href="https://doi.org/${study.doi_original}" target="_blank">${FReD.utils.escapeHtml(study.title_original || study.doi_original)}</a>` : FReD.utils.escapeHtml(study.title_original || 'Unknown')}</span>`
+          : (study.doi_original ? `<a href="https://doi.org/${study.doi_original}" target="_blank">${study.doi_original}</a>` : ''),
+        study.ref_replication
+          ? `<span title="${FReD.utils.escapeHtml(study.ref_replication)}">${study.doi_replication ? `<a href="https://doi.org/${study.doi_replication}" target="_blank">${FReD.utils.escapeHtml(study.title_replication || study.doi_replication)}</a>` : FReD.utils.escapeHtml(study.title_replication || 'Unknown')}</span>`
+          : (study.doi_replication ? `<a href="https://doi.org/${study.doi_replication}" target="_blank">${study.doi_replication}</a>` : ''),
+        `<span class="outcome-badge ${outcomeClass}">${FReD.utils.escapeHtml(outcome)}</span>`
       ];
     });
 
@@ -326,12 +320,9 @@ FReD.annotator = {
       this.resultsTable = $('#results-table').DataTable({
         data: tableData,
         columns: [
-          { title: 'Original DOI' },
-          { title: 'Replication DOI' },
-          { title: 'Description' },
-          { title: 'ES (Orig)' },
-          { title: 'ES (Rep)' },
-          { title: 'Result' }
+          { title: 'Original' },
+          { title: 'Replication' },
+          { title: 'Outcome' }
         ],
         pageLength: 10,
         scrollX: true,
@@ -343,7 +334,19 @@ FReD.annotator = {
   },
 
   /**
-   * Update outcome chart - horizontal stacked bar similar to Explorer
+   * Get CSS class for outcome
+   */
+  getOutcomeClass(outcome) {
+    if (!outcome) return 'not-coded';
+    const lower = outcome.toLowerCase();
+    if (lower.includes('success') || lower.includes('replicated')) return 'success';
+    if (lower.includes('fail') || lower.includes('not replicated')) return 'failure';
+    if (lower.includes('mixed')) return 'mixed';
+    return 'not-coded';
+  },
+
+  /**
+   * Update outcome chart - horizontal stacked bar
    */
   updateOutcomeChart() {
     const container = document.getElementById('outcome-chart');
@@ -355,22 +358,32 @@ FReD.annotator = {
     // Count outcomes
     const counts = {};
     this.matchedStudies.forEach(study => {
-      const { outcomeReport } = FReD.successCriteria.getOutcome(study, this.criterion);
-      const outcome = FReD.utils.capFirstLetter(outcomeReport || 'Not calculable');
+      const outcome = study.outcome || 'Not coded';
       counts[outcome] = (counts[outcome] || 0) + 1;
     });
 
     const total = this.matchedStudies.length;
     const outcomes = Object.keys(counts);
-    const colors = FReD.successCriteria.getColorsForCriterion(this.criterion);
 
-    // Sort outcomes logically
-    const outcomeOrder = ['Success', 'Mixed', 'Failure', 'Failure (reversal)', 'OS not significant', 'Not calculable'];
-    outcomes.sort((a, b) => {
-      const aIdx = outcomeOrder.findIndex(o => a.toLowerCase().includes(o.toLowerCase()));
-      const bIdx = outcomeOrder.findIndex(o => b.toLowerCase().includes(o.toLowerCase()));
-      return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
-    });
+    // Define colors for outcomes
+    const colors = {
+      'success': '#8FBC8F',
+      'replicated': '#8FBC8F',
+      'failure': '#F08080',
+      'not replicated': '#F08080',
+      'mixed': '#FFD700',
+      'inconclusive': '#C8C8C8',
+      'informative failure signal': '#FFB347',
+      'not coded': '#C8C8C8'
+    };
+
+    const getColor = (outcome) => {
+      const lower = outcome.toLowerCase();
+      for (const [key, color] of Object.entries(colors)) {
+        if (lower.includes(key)) return color;
+      }
+      return '#C8C8C8';
+    };
 
     // Create stacked bar traces
     const traces = outcomes.map(outcome => {
@@ -391,7 +404,7 @@ FReD.annotator = {
         textfont: { color: '#fff', size: 12 },
         hoverinfo: showLabel ? 'none' : 'text',
         hovertext: [`${outcome}: ${percentage}%`],
-        marker: { color: colors[outcome] || colors[outcome.toLowerCase()] || '#C8C8C8' }
+        marker: { color: getColor(outcome) }
       };
     });
 
@@ -446,7 +459,7 @@ FReD.annotator = {
 
     const tableData = this.floraData.entries.map(entry => [
       entry.doi_original || '',
-      FReD.utils.escapeHtml(entry.ref_original || '')
+      FReD.utils.escapeHtml(entry.ref_original || entry.title_original || '')
     ]);
 
     this.databaseTable = $('#database-table').DataTable({
@@ -497,107 +510,25 @@ FReD.annotator = {
       return;
     }
 
-    const html = FReD.reportGenerator.generate(this.matchedStudies, this.criterion, { format: 'html' });
-    const markdown = FReD.reportGenerator.generate(this.matchedStudies, this.criterion, { format: 'markdown' });
+    const html = FReD.reportGenerator.generate(this.matchedStudies, null, { format: 'html' });
+    const markdown = FReD.reportGenerator.generate(this.matchedStudies, null, { format: 'markdown' });
 
     reportContainer.innerHTML = html;
     mdSource.textContent = markdown;
   },
 
   /**
-   * Render replicability scatterplot
+   * Render replicability plot - simplified without effect sizes
    */
   renderReplicabilityPlot() {
     const container = document.getElementById('replicability-plot');
     if (!container || this.matchedStudies.length === 0) {
-      if (container) container.innerHTML = '';
+      if (container) container.innerHTML = '<p class="text-muted">No studies selected or effect size data not available in FLoRA dataset.</p>';
       return;
     }
 
-    const validStudies = this.matchedStudies.filter(s =>
-      s.es_original != null && s.es_replication != null
-    );
-
-    if (validStudies.length === 0) {
-      container.innerHTML = '<p class="text-muted">No studies with effect size data.</p>';
-      return;
-    }
-
-    const colors = FReD.successCriteria.getColorsForCriterion(this.criterion);
-
-    // Group by outcome
-    const tracesByOutcome = {};
-    validStudies.forEach(study => {
-      const { outcomeReport } = FReD.successCriteria.getOutcome(study, this.criterion);
-      const outcome = FReD.utils.capFirstLetter(outcomeReport || 'Not calculable');
-
-      if (!tracesByOutcome[outcome]) {
-        tracesByOutcome[outcome] = { x: [], y: [], text: [], color: colors[outcome] || '#888' };
-      }
-
-      tracesByOutcome[outcome].x.push(study.es_original);
-      tracesByOutcome[outcome].y.push(study.es_replication);
-      tracesByOutcome[outcome].text.push(
-        `${study.description || ''}<br>r(orig)=${FReD.utils.formatNumber(study.es_original, 3)}, r(rep)=${FReD.utils.formatNumber(study.es_replication, 3)}`
-      );
-    });
-
-    const traces = Object.entries(tracesByOutcome).map(([outcome, data]) => ({
-      x: data.x,
-      y: data.y,
-      text: data.text,
-      type: 'scatter',
-      mode: 'markers',
-      name: outcome,
-      marker: { color: data.color, size: 10 },
-      hovertemplate: '%{text}<extra></extra>'
-    }));
-
-    // Add diagonal line
-    traces.push({
-      x: [0, 1], y: [0, 1],
-      type: 'scatter', mode: 'lines',
-      line: { color: 'grey', dash: 'solid' },
-      showlegend: false, hoverinfo: 'skip'
-    });
-
-    // Add zero line
-    traces.push({
-      x: [0, 1], y: [0, 0],
-      type: 'scatter', mode: 'lines',
-      line: { color: 'grey', dash: 'dash' },
-      showlegend: false, hoverinfo: 'skip'
-    });
-
-    // Get theme-aware layout
-    const themeLayout = FReD.themeToggle ? FReD.themeToggle.getPlotlyLayout() : {};
-
-    const layout = {
-      paper_bgcolor: themeLayout.paper_bgcolor || '#FFFFFF',
-      plot_bgcolor: themeLayout.plot_bgcolor || '#FFFFFF',
-      font: themeLayout.font || {},
-      xaxis: {
-        title: 'Original Effect Size (r)',
-        range: [0, 1],
-        gridcolor: themeLayout.xaxis?.gridcolor,
-        linecolor: themeLayout.xaxis?.linecolor
-      },
-      yaxis: {
-        title: 'Replication Effect Size (r)',
-        range: [-0.5, 1],
-        gridcolor: themeLayout.yaxis?.gridcolor,
-        linecolor: themeLayout.yaxis?.linecolor
-      },
-      legend: {
-        orientation: 'h',
-        y: 1.1,
-        bgcolor: 'transparent',
-        font: themeLayout.legend?.font || {}
-      },
-      margin: { t: 60, r: 20, b: 60, l: 60 }
-    };
-
-    Plotly.newPlot(container, traces, layout, { displayModeBar: false, responsive: true });
+    // FLoRA data doesn't have effect sizes, so show a message
+    container.innerHTML = '<p class="text-muted">Effect size comparison not available. The FLoRA dataset provides replication outcomes without detailed effect size data.</p>';
   }
 };
 
