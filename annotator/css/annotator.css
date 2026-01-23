@@ -120,9 +120,14 @@ input[type="file"].form-control {
   color: #6c757d;
 }
 
-/* Coverage chart */
+/* Coverage summary bar */
 #coverage-chart {
   margin-bottom: 1rem;
+}
+
+/* Outcome chart - keep compact */
+#outcome-chart {
+  max-height: 120px;
 }
 
 /* Selected row styling */

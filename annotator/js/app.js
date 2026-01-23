@@ -273,7 +273,7 @@ FReD.annotator = {
   },
 
   /**
-   * Update coverage chart
+   * Update coverage chart - simple stacked bar showing DOI coverage
    */
   updateCoverageChart() {
     const container = document.getElementById('coverage-chart');
@@ -285,38 +285,20 @@ FReD.annotator = {
     const matched = new Set(this.matchedStudies.map(s => s.doi_original?.toLowerCase()));
     const inFReD = [...this.selectedDOIs].filter(doi => matched.has(doi)).length;
     const notInFReD = this.selectedDOIs.size - inFReD;
+    const total = this.selectedDOIs.size;
+    const pctInFReD = ((inFReD / total) * 100).toFixed(1);
+    const pctNotInFReD = ((notInFReD / total) * 100).toFixed(1);
 
-    const data = [{
-      values: [inFReD, notInFReD],
-      labels: ['In FReD', 'Not in FReD'],
-      type: 'pie',
-      marker: {
-        colors: ['var(--fred-success)', 'var(--fred-failure)'].map(c => {
-          // Get computed color values
-          return c.startsWith('var(') ? '#8FBC8F' : c; // Fallback for pie chart
-        })
-      },
-      textinfo: 'label+percent',
-      hoverinfo: 'label+value'
-    }];
-
-    // Get theme-aware layout
-    const themeLayout = FReD.themeToggle ? FReD.themeToggle.getPlotlyLayout() : {};
-
-    const layout = {
-      paper_bgcolor: themeLayout.paper_bgcolor || '#FFFFFF',
-      plot_bgcolor: themeLayout.plot_bgcolor || '#FFFFFF',
-      font: themeLayout.font || {},
-      title: {
-        text: `${this.selectedDOIs.size} DOIs: ${inFReD} in FReD`,
-        font: { color: themeLayout.font?.color }
-      },
-      height: 150,
-      margin: { t: 40, r: 20, b: 20, l: 20 },
-      showlegend: false
-    };
-
-    Plotly.newPlot(container, data, layout, { displayModeBar: false, responsive: true });
+    // Simple HTML-based coverage bar instead of Plotly pie chart
+    container.innerHTML = `
+      <div style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--fred-text);">
+        <strong>${total}</strong> DOIs submitted &bull; <strong>${inFReD}</strong> found in FReD (${pctInFReD}%)
+      </div>
+      <div style="display: flex; height: 24px; border-radius: 4px; overflow: hidden; background: #ddd;">
+        ${inFReD > 0 ? `<div style="width: ${pctInFReD}%; background: #8FBC8F; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 500;">${inFReD > 0 && parseFloat(pctInFReD) >= 10 ? 'In FReD' : ''}</div>` : ''}
+        ${notInFReD > 0 ? `<div style="width: ${pctNotInFReD}%; background: #C8C8C8; display: flex; align-items: center; justify-content: center; color: #666; font-size: 12px; font-weight: 500;">${notInFReD > 0 && parseFloat(pctNotInFReD) >= 15 ? 'Not in FReD' : ''}</div>` : ''}
+      </div>
+    `;
   },
 
   /**
@@ -361,7 +343,7 @@ FReD.annotator = {
   },
 
   /**
-   * Update outcome chart
+   * Update outcome chart - horizontal stacked bar similar to Explorer
    */
   updateOutcomeChart() {
     const container = document.getElementById('outcome-chart');
@@ -378,45 +360,82 @@ FReD.annotator = {
       counts[outcome] = (counts[outcome] || 0) + 1;
     });
 
+    const total = this.matchedStudies.length;
     const outcomes = Object.keys(counts);
     const colors = FReD.successCriteria.getColorsForCriterion(this.criterion);
 
-    const data = [{
-      y: outcomes,
-      x: outcomes.map(o => counts[o]),
-      type: 'bar',
-      orientation: 'h',
-      marker: {
-        color: outcomes.map(o => colors[o] || colors[o.toLowerCase()] || '#888')
-      }
-    }];
+    // Sort outcomes logically
+    const outcomeOrder = ['Success', 'Mixed', 'Failure', 'Failure (reversal)', 'OS not significant', 'Not calculable'];
+    outcomes.sort((a, b) => {
+      const aIdx = outcomeOrder.findIndex(o => a.toLowerCase().includes(o.toLowerCase()));
+      const bIdx = outcomeOrder.findIndex(o => b.toLowerCase().includes(o.toLowerCase()));
+      return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+    });
+
+    // Create stacked bar traces
+    const traces = outcomes.map(outcome => {
+      const count = counts[outcome];
+      const proportion = count / total;
+      const percentage = (proportion * 100).toFixed(1);
+      const showLabel = proportion >= 0.1;
+
+      return {
+        x: [proportion],
+        y: [''],
+        type: 'bar',
+        orientation: 'h',
+        name: `${outcome} (${count})`,
+        text: showLabel ? [`${percentage}%`] : [''],
+        textposition: 'inside',
+        insidetextanchor: 'middle',
+        textfont: { color: '#fff', size: 12 },
+        hoverinfo: showLabel ? 'none' : 'text',
+        hovertext: [`${outcome}: ${percentage}%`],
+        marker: { color: colors[outcome] || colors[outcome.toLowerCase()] || '#C8C8C8' }
+      };
+    });
 
     // Get theme-aware layout
     const themeLayout = FReD.themeToggle ? FReD.themeToggle.getPlotlyLayout() : {};
+    const textColor = themeLayout.font?.color || '#333';
 
     const layout = {
-      paper_bgcolor: themeLayout.paper_bgcolor || '#FFFFFF',
-      plot_bgcolor: themeLayout.plot_bgcolor || '#FFFFFF',
+      barmode: 'stack',
+      paper_bgcolor: 'transparent',
+      plot_bgcolor: 'transparent',
       font: themeLayout.font || {},
       title: {
-        text: 'Outcomes of Replication Attempts',
-        font: { color: themeLayout.font?.color }
+        text: `<b>Replication Outcomes</b> (${total} replications)`,
+        font: { size: 14, color: textColor },
+        x: 0,
+        xanchor: 'left'
       },
       xaxis: {
-        title: 'Count',
-        gridcolor: themeLayout.xaxis?.gridcolor,
-        linecolor: themeLayout.xaxis?.linecolor
+        showticklabels: false,
+        showgrid: false,
+        zeroline: false,
+        range: [0, 1],
+        fixedrange: true
       },
       yaxis: {
-        automargin: true,
-        gridcolor: themeLayout.yaxis?.gridcolor,
-        linecolor: themeLayout.yaxis?.linecolor
+        showticklabels: false,
+        showgrid: false,
+        zeroline: false,
+        fixedrange: true
       },
-      margin: { t: 40, r: 20, b: 40, l: 150 },
-      height: 200
+      legend: {
+        orientation: 'h',
+        y: -0.3,
+        x: 0.5,
+        xanchor: 'center',
+        bgcolor: 'transparent',
+        font: { size: 11, color: textColor }
+      },
+      margin: { t: 35, r: 10, b: 40, l: 10 },
+      height: 100
     };
 
-    Plotly.newPlot(container, data, layout, { displayModeBar: false, responsive: true });
+    Plotly.newPlot(container, traces, layout, { displayModeBar: false, responsive: true });
   },
 
   /**
