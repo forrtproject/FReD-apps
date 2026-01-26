@@ -82,7 +82,6 @@ FReD-apps/
 │   ├── process-explorer-data.R
 │   └── process-flora-data.R
 └── .github/workflows/
-    ├── deploy-pages.yml    # Auto-deploy on push to main
     └── update-data.yml     # Weekly data refresh
 ```
 
@@ -122,7 +121,7 @@ Data is automatically updated weekly via GitHub Actions:
 1. The `update-data.yml` workflow runs every Sunday at 2:00 AM UTC
 2. R preprocessing scripts fetch the latest data from the FReD package
 3. JSON files in `data/` are regenerated and committed if changes are detected
-4. The site is automatically redeployed via the `deploy-pages.yml` workflow
+4. GitHub Pages automatically redeploys from the main branch
 
 To manually trigger a data update, use the "Run workflow" button in the GitHub Actions tab.
 
@@ -135,4 +134,8 @@ To manually trigger a data update, use the "Run workflow" button in the GitHub A
 
 ## License
 
-Part of the FORRT project. Data is openly available for research and educational use.
+**Code:** [MIT License](LICENSE)
+
+**Data (FReD and FLoRA):** [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+
+Part of the [FORRT](https://forrt.org) project.
