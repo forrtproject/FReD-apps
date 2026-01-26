@@ -9,22 +9,22 @@ FReD.charts = FReD.charts || {};
 
 FReD.charts.trends = {
   decadeContainer: null,
-  journalContainer: null,
+  disciplineContainer: null,
   lastStudies: null,
   lastCriterion: null,
 
   /**
    * Initialize trend charts
    */
-  init(decadeContainerId, journalContainerId) {
+  init(decadeContainerId, disciplineContainerId) {
     this.decadeContainer = document.getElementById(decadeContainerId);
-    this.journalContainer = document.getElementById(journalContainerId);
+    this.disciplineContainer = document.getElementById(disciplineContainerId);
 
     // Listen for theme changes
     window.addEventListener('themechange', () => {
       if (this.lastStudies && this.lastCriterion) {
         this.renderDecade(this.lastStudies, this.lastCriterion);
-        this.renderJournal(this.lastStudies, this.lastCriterion);
+        this.renderDiscipline(this.lastStudies, this.lastCriterion);
       }
     });
   },
@@ -44,7 +44,7 @@ FReD.charts.trends = {
 
     // Extract years and decades
     const withDecade = aggregated.map(item => {
-      const year = FReD.utils.extractYear(item.ref_original);
+      const year = FReD.utils.extractYear(item.ref_o);
       const decade = year ? FReD.utils.getDecade(year) : null;
       return { ...item, year, decade };
     }).filter(item => item.decade && item.decade >= 1950 && item.decade <= 2020);
@@ -68,8 +68,10 @@ FReD.charts.trends = {
     const outcomes = [...new Set(withDecade.map(d => d.outcome))];
     const decades = Object.keys(decadeOutcomes).sort();
 
-    // Get colors
+    // Get colors - include mixed color explicitly
     const colors = FReD.successCriteria.getColorsForCriterion(criterion);
+    colors['mixed'] = '#DAA520';  // Goldenrod - darker yellow
+    colors['Mixed'] = '#DAA520';
 
     // Create traces
     const traces = outcomes.map(outcome => ({
@@ -125,55 +127,107 @@ FReD.charts.trends = {
   },
 
   /**
-   * Render journal bar chart
+   * Render discipline bar chart
    */
-  renderJournal(studies, criterion) {
-    if (!this.journalContainer) return;
+  renderDiscipline(studies, criterion) {
+    if (!this.disciplineContainer) return;
 
     // Aggregate by reference
     const aggregated = FReD.dataLoader.aggregateByReference(studies, criterion);
 
-    // Filter to those with journal info
-    const withJournal = aggregated.filter(item =>
-      item.orig_journal &&
-      !['consistent', 'inconsistent', 'mixed', 'success', 'failure'].includes(item.orig_journal.toLowerCase())
+    // Filter to those with discipline info
+    const withDiscipline = aggregated.filter(item =>
+      item.discipline &&
+      item.discipline.trim() !== ''
     );
 
-    if (withJournal.length === 0) {
-      this.journalContainer.innerHTML = '<div class="alert alert-info">No journal information available.</div>';
+    if (withDiscipline.length === 0) {
+      this.disciplineContainer.innerHTML = '<div class="alert alert-info">No discipline information available.</div>';
       return;
     }
 
-    // Group by journal and outcome
-    const journalOutcomes = {};
-    withJournal.forEach(item => {
-      const journal = this.capitalizeJournal(item.orig_journal);
-      if (!journalOutcomes[journal]) {
-        journalOutcomes[journal] = {};
+    // Group by discipline and outcome
+    const disciplineOutcomes = {};
+    withDiscipline.forEach(item => {
+      const discipline = this.capitalizeDiscipline(item.discipline);
+      if (!disciplineOutcomes[discipline]) {
+        disciplineOutcomes[discipline] = {};
       }
-      journalOutcomes[journal][item.outcome] = (journalOutcomes[journal][item.outcome] || 0) + 1;
+      disciplineOutcomes[discipline][item.outcome] = (disciplineOutcomes[discipline][item.outcome] || 0) + 1;
     });
 
-    // Sort journals by total count
-    const journalTotals = Object.entries(journalOutcomes).map(([journal, outcomes]) => ({
-      journal,
-      total: Object.values(outcomes).reduce((a, b) => a + b, 0)
-    })).sort((a, b) => b.total - a.total);
+    // Calculate totals and identify small disciplines (<10 replications)
+    const MIN_COUNT = 10;
+    const disciplineTotals = Object.entries(disciplineOutcomes).map(([discipline, outcomes]) => ({
+      discipline,
+      total: Object.values(outcomes).reduce((a, b) => a + b, 0),
+      outcomes
+    }));
 
-    // Limit to top journals if too many
-    const maxJournals = 30;
-    const topJournals = journalTotals.slice(0, maxJournals).map(j => j.journal);
+    // Separate large and small disciplines
+    const largeDisciplines = disciplineTotals.filter(d => d.total >= MIN_COUNT);
+    const smallDisciplines = disciplineTotals.filter(d => d.total < MIN_COUNT);
 
-    // Get unique outcomes
-    const outcomes = [...new Set(withJournal.map(d => d.outcome))];
+    // Merge small disciplines into "Other"
+    if (smallDisciplines.length > 0) {
+      const otherOutcomes = {};
+      smallDisciplines.forEach(d => {
+        Object.entries(d.outcomes).forEach(([outcome, count]) => {
+          otherOutcomes[outcome] = (otherOutcomes[outcome] || 0) + count;
+        });
+      });
+      const otherTotal = Object.values(otherOutcomes).reduce((a, b) => a + b, 0);
+      if (otherTotal > 0) {
+        largeDisciplines.push({
+          discipline: 'Other',
+          total: otherTotal,
+          outcomes: otherOutcomes
+        });
+      }
+    }
 
-    // Get colors
+    // Sort by total (largest first), with "Other" always at the end
+    largeDisciplines.sort((a, b) => {
+      if (a.discipline === 'Other') return 1;
+      if (b.discipline === 'Other') return -1;
+      return b.total - a.total;
+    });
+
+    // For horizontal bar chart, reverse order so largest is at top
+    const sortedDisciplines = largeDisciplines.reverse();
+    const displayDisciplines = sortedDisciplines.map(d => d.discipline);
+
+    // Build outcomes map for sorted disciplines
+    const finalDisciplineOutcomes = {};
+    sortedDisciplines.forEach(d => {
+      finalDisciplineOutcomes[d.discipline] = d.outcomes;
+    });
+
+    // Get unique outcomes and define display order
+    const allOutcomes = new Set();
+    sortedDisciplines.forEach(d => {
+      Object.keys(d.outcomes).forEach(o => allOutcomes.add(o));
+    });
+
+    // Define outcome order for consistent legend
+    const outcomeOrder = ['success', 'Success', 'failure', 'Failure', 'mixed', 'Mixed',
+                          'OS not significant', 'Not calculable', 'not calculable'];
+    const outcomes = [...allOutcomes].sort((a, b) => {
+      const aIdx = outcomeOrder.findIndex(o => o.toLowerCase() === a.toLowerCase());
+      const bIdx = outcomeOrder.findIndex(o => o.toLowerCase() === b.toLowerCase());
+      return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+    });
+
+    // Get colors - include mixed color explicitly
     const colors = FReD.successCriteria.getColorsForCriterion(criterion);
+    // Ensure mixed has the right color (dark yellow)
+    colors['mixed'] = '#DAA520';  // Goldenrod - darker yellow
+    colors['Mixed'] = '#DAA520';
 
     // Create traces
     const traces = outcomes.map(outcome => ({
-      x: topJournals.map(j => journalOutcomes[j][outcome] || 0),
-      y: topJournals,
+      x: displayDisciplines.map(d => finalDisciplineOutcomes[d][outcome] || 0),
+      y: displayDisciplines,
       type: 'bar',
       orientation: 'h',
       name: FReD.utils.capFirstLetter(outcome),
@@ -182,8 +236,8 @@ FReD.charts.trends = {
       }
     }));
 
-    // Calculate dynamic height
-    const plotHeight = Math.max(400, topJournals.length * 25 + 100);
+    // Calculate dynamic height based on number of disciplines
+    const plotHeight = Math.max(250, displayDisciplines.length * 40 + 120);
 
     // Get theme-aware layout
     const themeLayout = FReD.themeToggle ? FReD.themeToggle.getPlotlyLayout() : {};
@@ -192,10 +246,6 @@ FReD.charts.trends = {
       paper_bgcolor: themeLayout.paper_bgcolor || '#FFFFFF',
       plot_bgcolor: themeLayout.plot_bgcolor || '#FFFFFF',
       font: themeLayout.font || {},
-      title: {
-        text: `Aggregated replication outcomes by journal (k = ${withJournal.length} original studies)`,
-        font: { size: 14, color: themeLayout.font?.color }
-      },
       barmode: 'stack',
       xaxis: {
         title: 'Number of Replicated Original Studies',
@@ -204,19 +254,21 @@ FReD.charts.trends = {
       },
       yaxis: {
         automargin: true,
-        tickfont: { size: 10, color: themeLayout.font?.color },
+        tickfont: { size: 12, color: themeLayout.font?.color },
         gridcolor: themeLayout.yaxis?.gridcolor,
         linecolor: themeLayout.yaxis?.linecolor
       },
       legend: {
         orientation: 'h',
-        y: 1.05,
+        y: 1.02,
         x: 0.5,
         xanchor: 'center',
+        yanchor: 'bottom',
         bgcolor: 'transparent',
-        font: themeLayout.legend?.font || {}
+        font: { size: 11, color: themeLayout.font?.color },
+        traceorder: 'normal'
       },
-      margin: { t: 60, r: 20, b: 60, l: 200 },
+      margin: { t: 40, r: 20, b: 50, l: 180 },
       height: plotHeight,
       hovermode: 'y unified'
     };
@@ -226,13 +278,13 @@ FReD.charts.trends = {
       responsive: true
     };
 
-    Plotly.newPlot(this.journalContainer, traces, layout, config);
+    Plotly.newPlot(this.disciplineContainer, traces, layout, config);
   },
 
   /**
-   * Capitalize journal name properly
+   * Capitalize discipline name properly
    */
-  capitalizeJournal(name) {
+  capitalizeDiscipline(name) {
     if (!name) return 'Unknown';
     return name.replace(/\b\w/g, c => c.toUpperCase());
   },
@@ -245,9 +297,9 @@ FReD.charts.trends = {
       Plotly.purge(this.decadeContainer);
       this.decadeContainer.innerHTML = '';
     }
-    if (this.journalContainer) {
-      Plotly.purge(this.journalContainer);
-      this.journalContainer.innerHTML = '';
+    if (this.disciplineContainer) {
+      Plotly.purge(this.disciplineContainer);
+      this.disciplineContainer.innerHTML = '';
     }
   }
 };

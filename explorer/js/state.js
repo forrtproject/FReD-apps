@@ -66,24 +66,15 @@ FReD.state = {
    * Save current state to URL
    */
   saveToURL() {
-    const params = {};
-
-    // Only save non-default values
-    if (this.current.source !== this.defaults.source) {
-      params.source = this.current.source;
-    }
-    if (this.current.minPower !== this.defaults.minPower) {
-      params.power = this.current.minPower;
-    }
-    if (this.current.criterion !== this.defaults.criterion) {
-      params.criterion = this.current.criterion;
-    }
-    if (this.current.search !== this.defaults.search) {
-      params.search = this.current.search;
-    }
-    if (this.current.tab !== this.defaults.tab) {
-      params.tab = this.current.tab;
-    }
+    // Include all state keys - use null for defaults to trigger deletion
+    // Exception: criterion is always shown for transparency
+    const params = {
+      source: this.current.source !== this.defaults.source ? this.current.source : null,
+      power: this.current.minPower !== this.defaults.minPower ? this.current.minPower : null,
+      criterion: this.current.criterion,  // Always show criterion for transparency
+      search: this.current.search !== this.defaults.search ? this.current.search : null,
+      tab: this.current.tab !== this.defaults.tab ? this.current.tab : null
+    };
 
     FReD.utils.updateQueryParams(params);
   },

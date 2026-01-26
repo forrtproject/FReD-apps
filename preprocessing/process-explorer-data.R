@@ -88,6 +88,109 @@ close(pb)
 # Build the JSON structure
 cat("\nBuilding JSON structure...\n")
 
+# Define directional effect types (can detect reversals)
+DIRECTIONAL_ES_TYPES <- c(
+  "r", "d", "g", "t", "z", "test statistic", "b", "beta",
+  "odds ratio", "mean difference", "phi", "OR", "hedges' g",
+  "Cohen's d", "b (unstd)", "beta (std)", "partial r", "partial correlation"
+)
+
+# Helper function to determine if a p-value indicates significance (< 0.05)
+is_pval_significant <- function(pval_value, pval_type) {
+  if (is.na(pval_value)) return(NA)
+  if (is.na(pval_type)) {
+    # If type is missing, assume exact
+    return(pval_value < 0.05)
+  }
+  # l (<) means p < reported value
+  if (grepl("l|<", pval_type, ignore.case = TRUE)) {
+    return(pval_value <= 0.05)
+  }
+  # e (=) means p = reported value (exact)
+  if (grepl("e|=", pval_type, ignore.case = TRUE)) {
+    return(pval_value < 0.05)
+  }
+  # g (>) means p > reported value - only significant if value itself is < 0.05 (unlikely)
+  if (grepl("g|>", pval_type, ignore.case = TRUE)) {
+    return(FALSE)  # p > X can never confirm p < 0.05
+  }
+  # Default: treat as exact
+  return(pval_value < 0.05)
+}
+
+# Compute significance_r outcome using raw p-values
+compute_significance_outcome <- function(row) {
+  pval_o <- row$pval_value_o
+  pval_type_o <- row$pval_type_o
+  pval_r <- row$pval_value_r
+  pval_type_r <- row$pval_type_r
+  es_o <- row$es_original
+  es_r <- row$es_replication
+  es_type_o <- row$es_type_o
+
+  # Check if we can calculate
+  if (is.na(pval_o) || is.na(pval_r)) {
+    return(list(
+      outcome = "not calculable",
+      outcome_detailed = "not calculable",
+      outcome_report = "Not calculable"
+    ))
+  }
+
+  sig_o <- is_pval_significant(pval_o, pval_type_o)
+  sig_r <- is_pval_significant(pval_r, pval_type_r)
+
+  if (is.na(sig_o) || is.na(sig_r)) {
+    return(list(
+      outcome = "not calculable",
+      outcome_detailed = "not calculable",
+      outcome_report = "Not calculable"
+    ))
+  }
+
+  # Original not significant
+  if (!sig_o) {
+    return(list(
+      outcome = "OS not significant",
+      outcome_detailed = "OS not significant",
+      outcome_report = "OS not significant"
+    ))
+  }
+
+  # Original significant, replication not significant
+  if (!sig_r) {
+    return(list(
+      outcome = "failure",
+      outcome_detailed = "failure",
+      outcome_report = "Failure"
+    ))
+  }
+
+  # Both significant - check for reversal if possible
+  # Direction is assessable if we have a directional ES type and both effect sizes
+  direction_assessable <- !is.na(es_type_o) &&
+                          tolower(es_type_o) %in% tolower(DIRECTIONAL_ES_TYPES) &&
+                          !is.na(es_o) && !is.na(es_r)
+
+  if (direction_assessable) {
+    # Check if signs differ (reversal)
+    if (sign(es_o) != sign(es_r) && es_o != 0 && es_r != 0) {
+      return(list(
+        outcome = "failure",
+        outcome_detailed = "failure (reversal)",
+        outcome_report = "Failure (reversal)"
+      ))
+    }
+  }
+
+  # Both significant and same direction (or direction not assessable)
+  return(list(
+    outcome = "success",
+    outcome_detailed = "success",
+    outcome_report = "Success"
+  ))
+}
+
 # Select and rename columns for the static app
 # Note: FReD uses ref_o, doi_o, n_o etc. for original columns
 studies <- df %>%
@@ -100,40 +203,65 @@ studies <- df %>%
       as.numeric(orig_year)
     ),
     # Extract journal from reference (text before year in parentheses)
-    orig_journal = stringr::str_extract(ref_o, "(?<=\\. )[^.]+(?=,? \\d{4})")
+    orig_journal = stringr::str_extract(ref_o, "(?<=\\. )[^.]+(?=,? \\d{4})"),
+    # Determine if direction is assessable for this entry
+    direction_assessable = !is.na(es_type_o) &
+                           tolower(es_type_o) %in% tolower(DIRECTIONAL_ES_TYPES) &
+                           !is.na(es_original) & !is.na(es_replication)
   ) %>%
   transmute(
     id,
     description,
-    ref_original = ref_o,
-    ref_replication = ref_r,
-    doi_original = doi_o,
-    doi_replication = doi_r,
-    es_original,
-    es_replication,
-    n_original = n_o,
-    n_replication = n_r,
-    ci_lower_original = ci.lower_original,
-    ci_upper_original = ci.upper_original,
-    ci_lower_replication = ci.lower_replication,
-    ci_upper_replication = ci.upper_replication,
-    p_value_original,
-    p_value_replication,
+    ref_o,
+    ref_r,
+    doi_o,
+    doi_r,
+    url_r,
+    study_o,
+    study_r,
+    es_o = es_original,
+    es_r = es_replication,
+    es_type_o,
+    n_o,
+    n_r,
+    ci_lower_o = ci.lower_original,
+    ci_upper_o = ci.upper_original,
+    ci_lower_r = ci.lower_replication,
+    ci_upper_r = ci.upper_replication,
+    p_o = p_value_original,
+    p_r = p_value_replication,
+    pval_value_o,
+    pval_type_o,
+    pval_value_r,
+    pval_type_r,
     power_r,
     source = NA_character_,  # No dedicated source project field in current data
     orig_year = orig_year_calc,
     orig_journal,
+    discipline,
     validated = !is.na(contributors),  # Validated if has contributors
     tags,
-    osf_link = url_r,
     contributors,
     result,
-    result2
+    result2,
+    claim_text_o,
+    direction_assessable
   )
+
+# Compute significance_r outcomes using raw p-values
+cat("Computing significance_r outcomes using raw p-values...\n")
+significance_outcomes <- vector("list", nrow(df))
+for (i in seq_len(nrow(df))) {
+  significance_outcomes[[i]] <- compute_significance_outcome(df[i, ])
+}
 
 # Add outcomes to each study
 for (i in seq_len(nrow(studies))) {
-  studies$outcomes[i] <- list(outcomes_list[[i]])
+  # Start with pre-computed outcomes
+  study_outcomes <- outcomes_list[[i]]
+  # Override significance_r with raw p-value based calculation
+  study_outcomes[["significance_r"]] <- significance_outcomes[[i]]
+  studies$outcomes[i] <- list(study_outcomes)
   studies$reported_success[i] <- df$reported_success[i]  # Use actual reported_success field (0 NAs)
 }
 
@@ -146,7 +274,8 @@ success_criteria_meta <- list(
     label = "Significance of Replication",
     shortLabel = "Significance (Rep)",
     hasOSNotSignificant = TRUE,
-    note = "Replication success was assessed based on the statistical significance of the replication effect (and whether its direction is consistent with the original effect). Replications that were significant and in the same direction as the original were considered as successes, while replications that were not significant or in the opposite direction were considered as failures."
+    note = "Replication success was assessed based on the statistical significance of the replication effect (using reported p-values) and whether its direction is consistent with the original effect. Replications that were significant and in the same direction as the original were considered as successes, while replications that were not significant or in the opposite direction were considered as failures.",
+    hasDynamicReversalNote = TRUE
   ),
   significance_agg = list(
     label = "Aggregated Significance",
@@ -200,7 +329,7 @@ outcome_colors <- list(
   Failure = "#FF7F7F",
   `failure (reversal)` = "darkred",
   `Failure (reversal)` = "darkred",
-  `OS not significant` = "#D3D3D3",
+  `OS not significant` = "#535353",
   `Not calculable` = "#C8C8C8",
   `not calculable` = "#C8C8C8",
   `success (homogeneous and jointly significantly above 0)` = "#8FBC8F",

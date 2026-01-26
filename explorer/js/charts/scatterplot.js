@@ -45,8 +45,8 @@ FReD.charts.scatterplot = {
 
     // Filter out studies without effect sizes
     const validStudies = studies.filter(s =>
-      s.es_original != null && !isNaN(s.es_original) &&
-      s.es_replication != null && !isNaN(s.es_replication)
+      s.es_o != null && !isNaN(s.es_o) &&
+      s.es_r != null && !isNaN(s.es_r)
     );
 
     if (validStudies.length === 0) {
@@ -74,12 +74,12 @@ FReD.charts.scatterplot = {
         };
       }
 
-      tracesByOutcome[outcome].x.push(study.es_original);
-      tracesByOutcome[outcome].y.push(study.es_replication);
+      tracesByOutcome[outcome].x.push(study.es_o);
+      tracesByOutcome[outcome].y.push(study.es_r);
       tracesByOutcome[outcome].text.push(
         `${study.description || 'No description'}<br>` +
-        `r(original) = ${FReD.utils.formatNumber(study.es_original, 3)}<br>` +
-        `r(replication) = ${FReD.utils.formatNumber(study.es_replication, 3)}`
+        `r(original) = ${FReD.utils.formatNumber(study.es_o, 3)}<br>` +
+        `r(replication) = ${FReD.utils.formatNumber(study.es_r, 3)}`
       );
     });
 
@@ -145,15 +145,15 @@ FReD.charts.scatterplot = {
     });
 
     // Create rug plots for significance
-    const sigOriginal = validStudies.filter(s => s.p_value_original != null && s.p_value_original < 0.05);
-    const nsOriginal = validStudies.filter(s => s.p_value_original != null && s.p_value_original >= 0.05);
-    const sigReplication = validStudies.filter(s => s.p_value_replication != null && s.p_value_replication < 0.05);
-    const nsReplication = validStudies.filter(s => s.p_value_replication != null && s.p_value_replication >= 0.05);
+    const sigOriginal = validStudies.filter(s => s.p_o != null && s.p_o < 0.05);
+    const nsOriginal = validStudies.filter(s => s.p_o != null && s.p_o >= 0.05);
+    const sigReplication = validStudies.filter(s => s.p_r != null && s.p_r < 0.05);
+    const nsReplication = validStudies.filter(s => s.p_r != null && s.p_r >= 0.05);
 
     // Bottom rug (original significance) - using bar shapes for better visibility
     if (sigOriginal.length > 0) {
       traces.push({
-        x: sigOriginal.map(s => s.es_original),
+        x: sigOriginal.map(s => s.es_o),
         y: sigOriginal.map(() => -0.52),
         type: 'scatter',
         mode: 'markers',
@@ -165,7 +165,7 @@ FReD.charts.scatterplot = {
 
     if (nsOriginal.length > 0) {
       traces.push({
-        x: nsOriginal.map(s => s.es_original),
+        x: nsOriginal.map(s => s.es_o),
         y: nsOriginal.map(() => -0.52),
         type: 'scatter',
         mode: 'markers',
@@ -179,7 +179,7 @@ FReD.charts.scatterplot = {
     if (sigReplication.length > 0) {
       traces.push({
         x: sigReplication.map(() => -0.02),
-        y: sigReplication.map(s => s.es_replication),
+        y: sigReplication.map(s => s.es_r),
         type: 'scatter',
         mode: 'markers',
         marker: { symbol: 'line-ew', size: 12, color: '#4DCCD0', line: { width: 2, color: '#4DCCD0' } },
@@ -191,7 +191,7 @@ FReD.charts.scatterplot = {
     if (nsReplication.length > 0) {
       traces.push({
         x: nsReplication.map(() => -0.02),
-        y: nsReplication.map(s => s.es_replication),
+        y: nsReplication.map(s => s.es_r),
         type: 'scatter',
         mode: 'markers',
         marker: { symbol: 'line-ew', size: 12, color: '#FA948C', line: { width: 2, color: '#FA948C' } },

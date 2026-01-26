@@ -12,6 +12,7 @@ FReD.explorer = {
   filteredStudies: [],
   dataTable: null,
   fullDataTable: null,
+  visibleColumns: [],
 
   /**
    * Initialize the application
@@ -19,8 +20,8 @@ FReD.explorer = {
   async init() {
     console.log('Initializing FReD Explorer...');
 
-    // Show welcome modal
-    document.getElementById('welcome-modal').classList.add('active');
+    // Show welcome modal (unless user opted out)
+    this.initWelcomeModal();
 
     // Initialize state management
     FReD.state.init();
@@ -32,13 +33,16 @@ FReD.explorer = {
     FReD.charts.scatterplot.init('scatterplot');
     FReD.charts.barchart.init('barchart');
     FReD.charts.forestplot.init('forestplot');
-    FReD.charts.trends.init('decade-chart', 'journal-chart');
+    FReD.charts.trends.init('decade-chart', 'discipline-chart');
 
     // Setup tab navigation
     this.setupTabs();
 
     // Setup export buttons
     this.setupExportButtons();
+
+    // Setup column selector
+    this.setupColumnSelector();
 
     // Setup reference tooltips
     this.setupTooltips();
@@ -58,6 +62,32 @@ FReD.explorer = {
 
     // Load citation
     this.loadCitation();
+  },
+
+  /**
+   * Initialize welcome modal with "don't show again" functionality
+   */
+  initWelcomeModal() {
+    const STORAGE_KEY = 'fred-explorer-welcome-dismissed';
+    const modal = document.getElementById('welcome-modal');
+    const closeBtn = document.getElementById('welcome-close-btn');
+    const dontShowCheckbox = document.getElementById('welcome-dont-show');
+
+    // Check if user has opted out
+    if (localStorage.getItem(STORAGE_KEY) === 'true') {
+      return; // Don't show modal
+    }
+
+    // Show modal
+    modal.classList.add('active');
+
+    // Handle close button
+    closeBtn?.addEventListener('click', () => {
+      if (dontShowCheckbox?.checked) {
+        localStorage.setItem(STORAGE_KEY, 'true');
+      }
+      modal.classList.remove('active');
+    });
   },
 
   /**
@@ -114,6 +144,9 @@ FReD.explorer = {
     if (tab) {
       this.switchTab(tab);
     }
+
+    // Ensure success note is shown (updateFilters already calls this, but ensure visibility)
+    this.updateSuccessNote(FReD.state.get('criterion'));
   },
 
   /**
@@ -123,11 +156,8 @@ FReD.explorer = {
     // Apply state to filter UI
     FReD.filters.applyState(state);
 
-    // Re-filter and render
+    // Re-filter and render (includes success note update)
     this.updateFilters();
-
-    // Update success note
-    this.updateSuccessNote(state.criterion);
 
     // Switch tab if changed
     if (changes.tab) {
@@ -148,8 +178,12 @@ FReD.explorer = {
       search: state.search
     });
 
-    // Update count display
+    // Update count displays
     FReD.filters.updateStudyCount(this.filteredStudies.length, this.allStudies.length);
+    FReD.filters.updateReplicationCount(this.filteredStudies, this.allStudies);
+
+    // Update success note (depends on filtered studies)
+    this.updateSuccessNote(state.criterion);
 
     // Update all visualizations
     this.renderAll(state.criterion);
@@ -174,7 +208,7 @@ FReD.explorer = {
       FReD.charts.forestplot.render(this.filteredStudies);
     } else if (activeTab === 'correlates') {
       FReD.charts.trends.renderDecade(this.filteredStudies, criterion);
-      FReD.charts.trends.renderJournal(this.filteredStudies, criterion);
+      FReD.charts.trends.renderDiscipline(this.filteredStudies, criterion);
     } else if (activeTab === 'data') {
       this.updateFullDataTable();
     }
@@ -187,7 +221,21 @@ FReD.explorer = {
     const noteEl = document.getElementById('success-note');
     const criterionInfo = FReD.successCriteria.getCriterion(criterion);
     if (criterionInfo && noteEl) {
-      noteEl.innerHTML = `<strong>Note:</strong> ${criterionInfo.note}`;
+      let noteHtml = `<strong>Note:</strong> ${criterionInfo.note}`;
+
+      // Add dynamic reversal caveat for significance_r criterion
+      if (criterionInfo.hasDynamicReversalNote && this.filteredStudies.length > 0) {
+        const { successCount, nonAssessableCount } = FReD.successCriteria.countNonAssessableSuccesses(
+          this.filteredStudies,
+          criterion
+        );
+
+        if (nonAssessableCount > 0) {
+          noteHtml += `<br><em style="color: var(--fred-text-muted);">For the selected entries, ${nonAssessableCount} of ${successCount} successes cannot be distinguished from reversals (non-directional effect type or missing effect size data).</em>`;
+        }
+      }
+
+      noteEl.innerHTML = noteHtml;
     }
   },
 
@@ -248,7 +296,7 @@ FReD.explorer = {
       FReD.charts.forestplot.render(this.filteredStudies);
     } else if (tabId === 'correlates') {
       FReD.charts.trends.renderDecade(this.filteredStudies, criterion);
-      FReD.charts.trends.renderJournal(this.filteredStudies, criterion);
+      FReD.charts.trends.renderDiscipline(this.filteredStudies, criterion);
     } else if (tabId === 'data') {
       this.updateFullDataTable();
     }
@@ -259,47 +307,34 @@ FReD.explorer = {
    */
   updateStudiesTable(criterion) {
     const self = this;
+
+    // Get visible columns from column config
+    if (!this.visibleColumns || this.visibleColumns.length === 0) {
+      this.visibleColumns = FReD.columnConfig.getVisibleColumns();
+    }
+
+    // Build row data using column config
     const tableData = this.filteredStudies.map((study, idx) => {
-      const { outcomeReport } = FReD.successCriteria.getOutcome(study, criterion);
-      return [
-        '', // Control column for expand/collapse
-        FReD.utils.escapeHtml(study.description || ''),
-        FReD.utils.escapeHtml(study.tags || ''),
-        FReD.utils.capFirstLetter(outcomeReport || 'Not calculable'),
-        FReD.utils.formatReferenceCell(study.ref_original, study.doi_original),
-        FReD.utils.formatReferenceCell(study.ref_replication, study.doi_replication, study.osf_link),
-        study.osf_link ? `<a href="${study.osf_link}" target="_blank">Link</a>` : '',
-        idx // Store index to retrieve full study data
-      ];
+      return FReD.columnConfig.buildRowData(study, idx, this.visibleColumns, criterion);
     });
+
+    // Get the index of the idx column (always last)
+    const idxColIndex = this.visibleColumns.length + 1;
 
     if (this.dataTable) {
       this.dataTable.clear();
       this.dataTable.rows.add(tableData);
       this.dataTable.draw();
     } else {
+      const columns = FReD.columnConfig.buildTableColumns(this.visibleColumns);
+
       this.dataTable = $('#studies-table').DataTable({
         data: tableData,
-        columns: [
-          {
-            title: '',
-            className: 'dt-control',
-            orderable: false,
-            data: null,
-            defaultContent: '<button class="btn btn-sm btn-secondary details-btn">+</button>',
-            width: '30px'
-          },
-          { title: 'Description' },
-          { title: 'Tags' },
-          { title: 'Result' },
-          { title: 'Original Reference' },
-          { title: 'Replication Reference' },
-          { title: 'Link' },
-          { title: 'idx', visible: false }
-        ],
+        columns: columns,
         pageLength: 10,
-        order: [[1, 'asc']],
-        dom: 'frtip',
+        lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+        order: [[this.getOrigRefColumnIndex(), 'asc']], // Order by Original Reference if visible
+        dom: 'lfrtip', // Include length menu
         scrollX: true,
         language: {
           emptyTable: 'No effects match the current filters'
@@ -314,16 +349,291 @@ FReD.explorer = {
         if (row.child.isShown()) {
           row.child.hide();
           tr.removeClass('shown');
-          $(this).find('.details-btn').text('+');
         } else {
-          const studyIdx = row.data()[7];
+          const rowData = row.data();
+          const studyIdx = rowData[rowData.length - 1]; // idx is always last
           const study = self.filteredStudies[studyIdx];
           row.child(self.formatStudyDetails(study, criterion)).show();
           tr.addClass('shown');
-          $(this).find('.details-btn').text('−');
         }
       });
     }
+  },
+
+  /**
+   * Get the column index for Original Reference (for default sorting)
+   */
+  getOrigRefColumnIndex() {
+    const idx = this.visibleColumns.indexOf('ref_o');
+    return idx >= 0 ? idx + 1 : 1; // +1 for control column, default to 1
+  },
+
+  /**
+   * Setup column selector UI
+   */
+  setupColumnSelector() {
+    const container = document.getElementById('column-selector-container');
+    if (!container) return;
+
+    // Initialize visible columns
+    this.visibleColumns = FReD.columnConfig.getVisibleColumns();
+
+    // Build the dropdown HTML
+    const selectableColumns = FReD.columnConfig.getSelectableColumns();
+
+    let html = `
+      <div class="column-selector-wrapper">
+        <button class="column-selector-btn" id="column-selector-btn" type="button">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          Columns
+        </button>
+        <div class="column-selector-dropdown" id="column-selector-dropdown">
+          <div class="column-selector-header">
+            Select Columns
+            <span class="column-selector-reset" id="column-selector-reset">Reset</span>
+          </div>
+          <div class="column-selector-list">
+    `;
+
+    selectableColumns.forEach(col => {
+      const checked = this.visibleColumns.includes(col.key) ? 'checked' : '';
+      html += `
+        <div class="column-selector-item">
+          <input type="checkbox" id="col-${col.key}" data-column="${col.key}" ${checked}>
+          <label for="col-${col.key}">${col.label}</label>
+        </div>
+      `;
+    });
+
+    html += `
+          </div>
+        </div>
+      </div>
+    `;
+
+    container.innerHTML = html;
+
+    // Setup event handlers
+    const btn = document.getElementById('column-selector-btn');
+    const dropdown = document.getElementById('column-selector-dropdown');
+    const resetBtn = document.getElementById('column-selector-reset');
+
+    // Toggle dropdown
+    btn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('open');
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!container.contains(e.target)) {
+        dropdown.classList.remove('open');
+      }
+    });
+
+    // Handle checkbox changes
+    dropdown?.addEventListener('change', (e) => {
+      if (e.target.type === 'checkbox') {
+        this.handleColumnToggle(e.target.dataset.column, e.target.checked);
+      }
+    });
+
+    // Reset to defaults
+    resetBtn?.addEventListener('click', () => {
+      this.visibleColumns = FReD.columnConfig.resetToDefaults();
+      this.updateColumnCheckboxes();
+      this.rebuildTable();
+    });
+  },
+
+  /**
+   * Handle column visibility toggle
+   */
+  handleColumnToggle(columnKey, isVisible) {
+    if (isVisible && !this.visibleColumns.includes(columnKey)) {
+      this.visibleColumns.push(columnKey);
+    } else if (!isVisible) {
+      this.visibleColumns = this.visibleColumns.filter(k => k !== columnKey);
+    }
+
+    // Save preference
+    FReD.columnConfig.saveVisibleColumns(this.visibleColumns);
+
+    // Rebuild table with new columns
+    this.rebuildTable();
+  },
+
+  /**
+   * Update checkbox states in the column selector
+   */
+  updateColumnCheckboxes() {
+    const selectableColumns = FReD.columnConfig.getSelectableColumns();
+    selectableColumns.forEach(col => {
+      const checkbox = document.getElementById(`col-${col.key}`);
+      if (checkbox) {
+        checkbox.checked = this.visibleColumns.includes(col.key);
+      }
+    });
+  },
+
+  /**
+   * Rebuild the table with current column configuration
+   */
+  rebuildTable() {
+    // Destroy existing table
+    if (this.dataTable) {
+      this.dataTable.destroy();
+      this.dataTable = null;
+      $('#studies-table').empty();
+    }
+
+    // Rebuild with new columns
+    const criterion = FReD.state.get('criterion');
+    this.updateStudiesTable(criterion);
+  },
+
+  /**
+   * Format coded p-value for display
+   * Rules:
+   * - p < X: show only up to last non-zero digit (e.g., .05 not .0500)
+   * - p = X: show minimum 3 decimals, drop trailing zeros after 3 (e.g., .050 not .05000, but keep .05001)
+   * - p > X: same as p <
+   */
+  formatCodedPValue(value, type) {
+    if (value == null || value === '') return 'N/A';
+
+    // Convert to number in case it's a string from JSON
+    const numValue = Number(value);
+    if (isNaN(numValue)) return 'N/A';
+
+    const symbol = (type === 'l' || type === '<') ? '<' :
+                   (type === 'g' || type === '>') ? '>' : '=';
+
+    let formatted;
+    if (symbol === '=') {
+      // For p = X: minimum 3 decimals, drop trailing zeros after position 3
+      // Format to enough precision first
+      const fullStr = numValue.toFixed(6);
+      // Find the decimal point position
+      const decimalPos = fullStr.indexOf('.');
+      if (decimalPos === -1) {
+        formatted = numValue.toFixed(3);
+      } else {
+        // Check if there are significant digits beyond position 3
+        const fullDecimals = fullStr.slice(decimalPos + 1);
+        let lastSignificant = 2; // minimum 3 decimals (index 2)
+        for (let i = fullDecimals.length - 1; i >= 3; i--) {
+          if (fullDecimals[i] !== '0') {
+            lastSignificant = i;
+            break;
+          }
+        }
+        formatted = numValue.toFixed(lastSignificant + 1);
+      }
+    } else {
+      // For p < or p >: show only up to last non-zero digit
+      const fullStr = numValue.toFixed(6);
+      // Remove trailing zeros
+      formatted = parseFloat(fullStr).toString();
+      // Ensure at least some decimal representation for small values
+      if (!formatted.includes('.') && numValue < 1) {
+        formatted = numValue.toFixed(2);
+      }
+    }
+
+    return `p ${symbol} ${formatted}`;
+  },
+
+  /**
+   * Generate CI visualization SVG
+   */
+  generateCIVisualization(study) {
+    const es_o = study.es_o;
+    const es_r = study.es_r;
+    const ci_lower_o = study.ci_lower_o;
+    const ci_upper_o = study.ci_upper_o;
+    const ci_lower_r = study.ci_lower_r;
+    const ci_upper_r = study.ci_upper_r;
+
+    // Check if we have enough data
+    const hasOriginal = es_o != null && ci_lower_o != null && ci_upper_o != null;
+    const hasReplication = es_r != null && ci_lower_r != null && ci_upper_r != null;
+
+    if (!hasOriginal && !hasReplication) {
+      return '<p style="font-size: 0.875rem; color: var(--fred-text-muted);">Insufficient data for visualization</p>';
+    }
+
+    // Calculate range for scaling (include 0 always)
+    const allValues = [0];
+    if (hasOriginal) allValues.push(ci_lower_o, ci_upper_o, es_o);
+    if (hasReplication) allValues.push(ci_lower_r, ci_upper_r, es_r);
+
+    const minVal = Math.min(...allValues);
+    const maxVal = Math.max(...allValues);
+    const range = maxVal - minVal || 1;
+    const padding = range * 0.1;
+    const scaleMin = minVal - padding;
+    const scaleMax = maxVal + padding;
+    const scaleRange = scaleMax - scaleMin;
+
+    // SVG dimensions
+    const width = 300;
+    const height = 80;
+    const marginLeft = 10;
+    const marginRight = 10;
+    const plotWidth = width - marginLeft - marginRight;
+
+    // Scale function
+    const scale = (val) => marginLeft + ((val - scaleMin) / scaleRange) * plotWidth;
+    const zeroX = scale(0);
+
+    let svg = `<svg width="${width}" height="${height}" style="display: block; margin-top: 0.5rem;">`;
+
+    // Zero line
+    svg += `<line x1="${zeroX}" y1="10" x2="${zeroX}" y2="70" stroke="#999" stroke-width="1" stroke-dasharray="3,3"/>`;
+    svg += `<text x="${zeroX}" y="78" text-anchor="middle" font-size="10" fill="#666">0</text>`;
+
+    // Original CI (top row, y=25)
+    if (hasOriginal) {
+      const x1 = scale(ci_lower_o);
+      const x2 = scale(ci_upper_o);
+      const xPoint = scale(es_o);
+      svg += `<line x1="${x1}" y1="25" x2="${x2}" y2="25" stroke="#666" stroke-width="2"/>`;
+      svg += `<line x1="${x1}" y1="20" x2="${x1}" y2="30" stroke="#666" stroke-width="2"/>`;
+      svg += `<line x1="${x2}" y1="20" x2="${x2}" y2="30" stroke="#666" stroke-width="2"/>`;
+      svg += `<circle cx="${xPoint}" cy="25" r="5" fill="#666"/>`;
+      svg += `<text x="5" y="28" font-size="10" fill="#666">O</text>`;
+    }
+
+    // Replication CI (bottom row, y=50)
+    if (hasReplication) {
+      const x1 = scale(ci_lower_r);
+      const x2 = scale(ci_upper_r);
+      const xPoint = scale(es_r);
+      svg += `<line x1="${x1}" y1="50" x2="${x2}" y2="50" stroke="var(--fred-primary)" stroke-width="2"/>`;
+      svg += `<line x1="${x1}" y1="45" x2="${x1}" y2="55" stroke="var(--fred-primary)" stroke-width="2"/>`;
+      svg += `<line x1="${x2}" y1="45" x2="${x2}" y2="55" stroke="var(--fred-primary)" stroke-width="2"/>`;
+      svg += `<circle cx="${xPoint}" cy="50" r="5" fill="var(--fred-primary)"/>`;
+      svg += `<text x="5" y="53" font-size="10" fill="var(--fred-primary)">R</text>`;
+    }
+
+    svg += '</svg>';
+    return svg;
+  },
+
+  /**
+   * Format DOI as hyperlink showing full URL
+   */
+  formatDOILink(doi) {
+    if (!doi) return '';
+    const cleanDoi = doi.trim();
+    const url = cleanDoi.startsWith('http') ? cleanDoi : `https://doi.org/${cleanDoi}`;
+    return ` <a href="${FReD.utils.escapeHtml(url)}" target="_blank">${FReD.utils.escapeHtml(url)}</a>`;
   },
 
   /**
@@ -332,23 +642,46 @@ FReD.explorer = {
   formatStudyDetails(study, criterion) {
     const { outcomeReport } = FReD.successCriteria.getOutcome(study, criterion);
 
+    // Build replication reference with link
+    const repRef = FReD.utils.escapeHtml(study.ref_r || 'N/A');
+    const repLink = study.url_r ? ` <a href="${FReD.utils.escapeHtml(study.url_r)}" target="_blank" style="white-space: nowrap;">[Report]</a>` : '';
+
+    // DOI links
+    const origDOI = this.formatDOILink(study.doi_o);
+    const repDOI = this.formatDOILink(study.doi_r);
+
+    // Format claim (from claim_text_o field) - strip surrounding quotes if present
+    let claimText = study.claim_text_o || '';
+    if (claimText.startsWith('"') && claimText.endsWith('"')) {
+      claimText = claimText.slice(1, -1);
+    }
+    claimText = claimText.trim() ? FReD.utils.escapeHtml(claimText.trim()) : null;
+    const claimsHtml = claimText ? `
+          <div style="margin-bottom: 1rem;">
+            <h5 style="margin: 0 0 0.5rem 0; color: var(--fred-primary);">Claim</h5>
+            <div style="font-size: 0.875rem;">
+              <p style="margin: 0;">${claimText}</p>
+            </div>
+          </div>` : '';
+
     return `
       <div class="study-details" style="padding: 1rem; background: var(--fred-bg-alt); border-radius: 4px; margin: 0.5rem;">
+        ${claimsHtml}
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
           <div>
             <h5 style="margin: 0 0 0.5rem 0; color: var(--fred-primary);">Effect Sizes</h5>
             <table style="font-size: 0.875rem;">
-              <tr><td style="padding-right: 1rem;"><strong>Original ES (r):</strong></td><td>${FReD.utils.formatNumber(study.es_original, 3) || 'N/A'}</td></tr>
-              <tr><td><strong>Replication ES (r):</strong></td><td>${FReD.utils.formatNumber(study.es_replication, 3) || 'N/A'}</td></tr>
-              <tr><td><strong>Original N:</strong></td><td>${study.n_original || 'N/A'}</td></tr>
-              <tr><td><strong>Replication N:</strong></td><td>${study.n_replication || 'N/A'}</td></tr>
+              <tr><td style="padding-right: 1rem;"><strong>Original ES (r):</strong></td><td>${FReD.utils.formatNumber(study.es_o, 3) || 'N/A'}</td></tr>
+              <tr><td><strong>Replication ES (r):</strong></td><td>${FReD.utils.formatNumber(study.es_r, 3) || 'N/A'}</td></tr>
+              <tr><td><strong>Original N:</strong></td><td>${study.n_o || 'N/A'}</td></tr>
+              <tr><td><strong>Replication N:</strong></td><td>${study.n_r || 'N/A'}</td></tr>
             </table>
           </div>
           <div>
             <h5 style="margin: 0 0 0.5rem 0; color: var(--fred-primary);">Statistics</h5>
             <table style="font-size: 0.875rem;">
-              <tr><td style="padding-right: 1rem;"><strong>Original p-value:</strong></td><td>${FReD.utils.formatNumber(study.p_value_original, 4) || 'N/A'}</td></tr>
-              <tr><td><strong>Replication p-value:</strong></td><td>${FReD.utils.formatNumber(study.p_value_replication, 4) || 'N/A'}</td></tr>
+              <tr><td style="padding-right: 1rem;"><strong>Original p-value:</strong></td><td>${this.formatCodedPValue(study.pval_value_o, study.pval_type_o)}</td></tr>
+              <tr><td><strong>Replication p-value:</strong></td><td>${this.formatCodedPValue(study.pval_value_r, study.pval_type_r)}</td></tr>
               <tr><td><strong>Power:</strong></td><td>${FReD.utils.formatNumber(study.power_r, 2) || 'N/A'}</td></tr>
               <tr><td><strong>Outcome (${criterion}):</strong></td><td>${FReD.utils.capFirstLetter(outcomeReport || 'Not calculable')}</td></tr>
             </table>
@@ -356,12 +689,17 @@ FReD.explorer = {
           <div>
             <h5 style="margin: 0 0 0.5rem 0; color: var(--fred-primary);">Confidence Intervals</h5>
             <table style="font-size: 0.875rem;">
-              <tr><td style="padding-right: 1rem;"><strong>Original CI:</strong></td><td>[${FReD.utils.formatNumber(study.ci_lower_original, 3) || '?'}, ${FReD.utils.formatNumber(study.ci_upper_original, 3) || '?'}]</td></tr>
-              <tr><td><strong>Replication CI:</strong></td><td>[${FReD.utils.formatNumber(study.ci_lower_replication, 3) || '?'}, ${FReD.utils.formatNumber(study.ci_upper_replication, 3) || '?'}]</td></tr>
+              <tr><td style="padding-right: 1rem;"><strong>Original CI:</strong></td><td>[${FReD.utils.formatNumber(study.ci_lower_o, 3) || '?'}, ${FReD.utils.formatNumber(study.ci_upper_o, 3) || '?'}]</td></tr>
+              <tr><td><strong>Replication CI:</strong></td><td>[${FReD.utils.formatNumber(study.ci_lower_r, 3) || '?'}, ${FReD.utils.formatNumber(study.ci_upper_r, 3) || '?'}]</td></tr>
             </table>
+            ${this.generateCIVisualization(study)}
           </div>
         </div>
-        ${study.osf_link ? `<p style="margin: 1rem 0 0 0;"><a href="${study.osf_link}" target="_blank">View on OSF →</a></p>` : ''}
+        <div style="margin-top: 1rem;">
+          <h5 style="margin: 0 0 0.5rem 0; color: var(--fred-primary);">References</h5>
+          <p style="font-size: 0.875rem; margin: 0 0 0.5rem 0;"><strong>Original:</strong> ${FReD.utils.escapeHtml(study.ref_o || 'N/A')}${origDOI}</p>
+          <p style="font-size: 0.875rem; margin: 0;"><strong>Replication:</strong> ${repRef}${repDOI}${repLink}</p>
+        </div>
       </div>
     `;
   },
@@ -372,10 +710,10 @@ FReD.explorer = {
   updateFullDataTable() {
     const tableData = this.filteredStudies.map(study => [
       FReD.utils.escapeHtml(study.description || ''),
-      FReD.utils.formatNumber(study.es_original, 3),
-      FReD.utils.formatNumber(study.es_replication, 3),
-      study.n_original || '',
-      study.n_replication || '',
+      FReD.utils.formatNumber(study.es_o, 3),
+      FReD.utils.formatNumber(study.es_r, 3),
+      study.n_o || '',
+      study.n_r || '',
       FReD.utils.formatNumber(study.power_r, 2),
       study.result || '',
       FReD.utils.escapeHtml(study.source || '')
@@ -548,8 +886,8 @@ FReD.explorer = {
         study.description || '',
         study.tags || '',
         outcomeReport || 'Not calculable',
-        study.ref_original || '',
-        study.ref_replication || ''
+        study.ref_o || '',
+        study.ref_r || ''
       ].join('\t');
     });
     return [headers.join('\t'), ...rows].join('\n');
@@ -566,12 +904,12 @@ FReD.explorer = {
         description: study.description || '',
         tags: study.tags || '',
         result: outcomeReport || 'Not calculable',
-        ref_original: study.ref_original || '',
-        ref_replication: study.ref_replication || '',
-        es_original: study.es_original,
-        es_replication: study.es_replication,
-        n_original: study.n_original,
-        n_replication: study.n_replication,
+        ref_o: study.ref_o || '',
+        ref_r: study.ref_r || '',
+        es_o: study.es_o,
+        es_r: study.es_r,
+        n_o: study.n_o,
+        n_r: study.n_r,
         power: study.power_r,
         source: study.source || ''
       };

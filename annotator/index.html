@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FReD Annotator - Annotate Reading Lists</title>
+  <title>FLoRA Annotator - Annotate Reading Lists</title>
 
   <!-- Stylesheets -->
   <link rel="stylesheet" href="../shared/css/theme.css">
@@ -24,7 +24,7 @@
         <div style="display: flex; align-items: center; gap: 1rem;">
           <img src="https://forrt.org/author/forrt/avatar_hu8bc9dda6369ea35e3d2850cf7115c3e5_11296_270x270_fill_q100_h2_lanczos_center_2.webp" alt="FORRT Logo" style="height: 50px; border-radius: 8px;">
           <div>
-            <h1 style="margin: 0;">FReD Annotator</h1>
+            <h1 style="margin: 0;">FLoRA Annotator</h1>
             <p style="margin: 0; opacity: 0.9; font-size: 0.9rem;">Annotate Reading Lists with Replication Information</p>
           </div>
         </div>
@@ -81,18 +81,59 @@ Example:
 Smith, J. (2020). Study title. Journal Name. https://doi.org/10.1234/example
 10.5678/another-doi"
             ></textarea>
+
+            <!-- DOI Lookup Section -->
+            <div class="doi-lookup-section" style="margin-top: 0.75rem; padding: 0.75rem; background: var(--fred-bg-alt); border-radius: 6px;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                <span style="font-size: 0.875rem; color: var(--fred-text-muted);">Don't have DOIs?</span>
+                <button class="btn btn-sm btn-secondary" id="btn-lookup-dois" title="Look up DOIs for references without them">
+                  Look up DOIs via CrossRef
+                </button>
+                <input type="email"
+                       id="crossref-email"
+                       class="form-control"
+                       placeholder="your@email.com (required by CrossRef)"
+                       style="flex: 1; min-width: 200px; max-width: 300px; font-size: 0.875rem; padding: 0.35rem 0.5rem;">
+              </div>
+              <small class="text-muted" style="display: block; margin-top: 0.5rem;">
+                This will query CrossRef to find DOIs for references that don't already contain them.
+              </small>
+            </div>
+
+            <!-- Retraction Check Option -->
+            <div class="retraction-check-section" style="margin-top: 0.75rem; padding: 0.75rem; background: var(--fred-bg-alt); border-radius: 6px; border: 1px solid var(--fred-border);">
+              <label style="display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer;">
+                <input type="checkbox" id="check-retractions" style="margin-top: 0.2rem;">
+                <div>
+                  <span style="font-size: 0.875rem; font-weight: 500; color: var(--fred-text);">Check for retracted articles</span>
+                  <small class="text-muted" style="display: block; margin-top: 0.25rem;">
+                    Query the Retraction Watch database to identify retracted papers. This will slow down processing as it requires downloading the database (~15MB).
+                  </small>
+                </div>
+              </label>
+            </div>
           </div>
 
           <!-- File Upload -->
           <div class="form-group">
             <label class="form-label" for="file-upload">Or upload a file</label>
-            <input type="file" id="file-upload" class="form-control" accept=".pdf,.bib,.ris,.txt">
-            <small class="text-muted">Supported formats: PDF, BibTeX (.bib), RIS (.ris), plain text (.txt)</small>
+            <div class="file-upload-wrapper">
+              <label for="file-upload" class="custom-file-upload">
+                Choose File
+              </label>
+              <input type="file" id="file-upload" accept=".pdf,.bib,.ris,.txt">
+              <span class="file-chosen" id="file-chosen">No file chosen</span>
+            </div>
+            <small class="text-muted" style="display: block; margin-top: 0.5rem;">Supported formats: PDF, BibTeX (.bib), RIS (.ris), plain text (.txt)</small>
           </div>
 
           <!-- Action Buttons -->
-          <div class="btn-group mt-2">
+          <div class="btn-group mt-2" id="process-buttons">
+            <!-- Initial state: single Process button -->
             <button class="btn btn-primary" id="btn-process">Process References</button>
+            <!-- After DOIs added: Add/Replace buttons (hidden initially) -->
+            <button class="btn btn-primary" id="btn-add-refs" style="display: none;">Add to Selection</button>
+            <button class="btn btn-secondary" id="btn-replace-refs" style="display: none;">Replace Selection</button>
             <button class="btn btn-secondary" id="btn-clear">Clear</button>
           </div>
         </div>
@@ -114,7 +155,7 @@ Smith, J. (2020). Study title. Journal Name. https://doi.org/10.1234/example
     <!-- Tab: Study Selection -->
     <div class="tab-content" id="tab-selection">
       <div class="card">
-        <div class="card-header">Studies Found in FReD</div>
+        <div class="card-header">Studies Found in FLoRA</div>
         <div class="card-body">
           <!-- Coverage Summary -->
           <div id="coverage-chart" style="margin-bottom: 1rem;"></div>
@@ -138,14 +179,15 @@ Smith, J. (2020). Study title. Journal Name. https://doi.org/10.1234/example
 
       <!-- Database Browser -->
       <div class="card">
-        <div class="card-header">Browse FReD Database</div>
+        <div class="card-header">Browse FLoRA Database</div>
         <div class="card-body">
           <p class="text-muted">Select additional studies to include in your report.</p>
           <table id="database-table" class="display" style="width:100%">
             <thead>
               <tr>
-                <th>DOI</th>
+                <th></th>
                 <th>Reference</th>
+                <th>Title</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -161,7 +203,7 @@ Smith, J. (2020). Study title. Journal Name. https://doi.org/10.1234/example
           Replication Report
           <div class="btn-group">
             <button class="btn btn-sm btn-secondary" id="btn-copy-report">Copy HTML</button>
-            <button class="btn btn-sm btn-secondary" id="btn-toggle-markdown">Show Markdown</button>
+            <button class="btn btn-sm btn-secondary" id="btn-copy-markdown">Copy Markdown</button>
             <button class="btn btn-sm btn-primary" id="btn-print">Print / Save PDF</button>
           </div>
         </div>
@@ -171,20 +213,13 @@ Smith, J. (2020). Study title. Journal Name. https://doi.org/10.1234/example
         </div>
       </div>
 
-      <!-- Replicability Plot -->
-      <div class="card">
-        <div class="card-header">Effect Size Comparison</div>
-        <div class="card-body">
-          <div class="plot-container" id="replicability-plot"></div>
-        </div>
-      </div>
     </div>
   </main>
 
   <!-- Footer -->
   <footer style="background: var(--fred-bg-alt); padding: 1rem 0; margin-top: 2rem; text-align: center; color: var(--fred-text-muted);">
     <div class="container">
-      <p>FReD Annotator | <a href="https://forrt.org" target="_blank">FORRT</a> | Data last updated: <span id="data-updated">Loading...</span></p>
+      <p>FLoRA Annotator | <a href="https://forrt.org" target="_blank">FORRT</a> | Data last updated: <span id="data-updated">Loading...</span></p>
     </div>
   </footer>
 
@@ -192,12 +227,12 @@ Smith, J. (2020). Study title. Journal Name. https://doi.org/10.1234/example
   <div class="modal-overlay" id="welcome-modal">
     <div class="modal">
       <div class="modal-header">
-        <h3>Welcome to FReD Annotator</h3>
+        <h3>Welcome to FLoRA Annotator</h3>
         <button class="modal-close" onclick="document.getElementById('welcome-modal').classList.remove('active')">&times;</button>
       </div>
       <div class="modal-body">
         <p>
-          The <strong>FReD Annotator</strong> helps you identify which studies in your reading list
+          The <strong>FLoRA Annotator</strong> helps you identify which studies in a reference list, journal article or reading list 
           have been replicated and what the outcomes were.
         </p>
         <h4>How to use:</h4>
@@ -206,17 +241,13 @@ Smith, J. (2020). Study title. Journal Name. https://doi.org/10.1234/example
           <li><strong>Study Selection:</strong> Review matched studies and select additional ones</li>
           <li><strong>Report:</strong> Generate an annotated report to share or save</li>
         </ol>
-        <h4>Legend</h4>
-        <ul style="list-style: none; padding-left: 0;">
-          <li><span style="color: darkgreen;">&#x2714;</span> <strong>Success:</strong> All replications succeeded</li>
-          <li><span style="color: darkred;">&#x2716;</span> <strong>Failure:</strong> All replications failed</li>
-          <li>&#x2753; <strong>Mixed:</strong> Mixed results across replications</li>
-          <li>&#x2754; <strong>N/A:</strong> Original study not significant</li>
-          <li>&#x270F; <strong>Not Coded:</strong> Outcome not yet coded</li>
-        </ul>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-primary" onclick="document.getElementById('welcome-modal').classList.remove('active')">Get Started</button>
+        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; cursor: pointer;">
+          <input type="checkbox" id="welcome-dont-show">
+          Don't show this again
+        </label>
+        <button class="btn btn-primary" id="welcome-close-btn">Get Started</button>
       </div>
     </div>
   </div>
@@ -232,6 +263,7 @@ Smith, J. (2020). Study title. Journal Name. https://doi.org/10.1234/example
   <script src="../shared/js/success-criteria.js"></script>
   <script src="../shared/js/data-loader.js"></script>
   <script src="js/doi-parser.js"></script>
+  <script src="js/retraction-checker.js"></script>
   <script src="js/report-generator.js"></script>
   <script src="js/app.js"></script>
 </body>

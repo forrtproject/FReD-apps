@@ -85,27 +85,27 @@ FReD.themeToggle = {
     const isDark = this.isDark();
 
     return {
-      paper_bgcolor: isDark ? '#2A2E30' : '#FFFFFF',
-      plot_bgcolor: isDark ? '#2A2E30' : '#FFFFFF',
+      paper_bgcolor: isDark ? '#1E293B' : '#FFFFFF',
+      plot_bgcolor: isDark ? '#1E293B' : '#FFFFFF',
       font: {
-        color: isDark ? '#E8E6E1' : '#212529'
+        color: isDark ? '#F1F5F9' : '#212529'
       },
       xaxis: {
-        gridcolor: isDark ? '#3A3E40' : '#E5E3D8',
-        linecolor: isDark ? '#3A3E40' : '#E5E3D8',
-        tickcolor: isDark ? '#3A3E40' : '#E5E3D8',
-        zerolinecolor: isDark ? '#4A4E50' : '#D5D3C8'
+        gridcolor: isDark ? '#334155' : '#E5E3D8',
+        linecolor: isDark ? '#334155' : '#E5E3D8',
+        tickcolor: isDark ? '#334155' : '#E5E3D8',
+        zerolinecolor: isDark ? '#475569' : '#D5D3C8'
       },
       yaxis: {
-        gridcolor: isDark ? '#3A3E40' : '#E5E3D8',
-        linecolor: isDark ? '#3A3E40' : '#E5E3D8',
-        tickcolor: isDark ? '#3A3E40' : '#E5E3D8',
-        zerolinecolor: isDark ? '#4A4E50' : '#D5D3C8'
+        gridcolor: isDark ? '#334155' : '#E5E3D8',
+        linecolor: isDark ? '#334155' : '#E5E3D8',
+        tickcolor: isDark ? '#334155' : '#E5E3D8',
+        zerolinecolor: isDark ? '#475569' : '#D5D3C8'
       },
       legend: {
         bgcolor: 'transparent',
         font: {
-          color: isDark ? '#E8E6E1' : '#212529'
+          color: isDark ? '#CBD5E1' : '#212529'
         }
       }
     };

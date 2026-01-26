@@ -123,8 +123,8 @@ FReD.dataLoader = {
       const searchLower = filters.search.toLowerCase().trim();
       filtered = filtered.filter(s =>
         (s.description && s.description.toLowerCase().includes(searchLower)) ||
-        (s.ref_original && s.ref_original.toLowerCase().includes(searchLower)) ||
-        (s.ref_replication && s.ref_replication.toLowerCase().includes(searchLower)) ||
+        (s.ref_o && s.ref_o.toLowerCase().includes(searchLower)) ||
+        (s.ref_r && s.ref_r.toLowerCase().includes(searchLower)) ||
         (s.tags && s.tags.toLowerCase().includes(searchLower))
       );
     }
@@ -164,7 +164,7 @@ FReD.dataLoader = {
    * Get studies grouped by reference
    */
   getStudiesByReference(studies) {
-    return FReD.utils.groupBy(studies, 'ref_original');
+    return FReD.utils.groupBy(studies, 'ref_o');
   },
 
   /**
@@ -192,9 +192,10 @@ FReD.dataLoader = {
       }
 
       aggregated.push({
-        ref_original: ref,
+        ref_o: ref,
         orig_journal: refStudies[0].orig_journal,
         orig_year: refStudies[0].orig_year,
+        discipline: refStudies[0].discipline,
         outcome: aggregateOutcome,
         count: refStudies.length
       });

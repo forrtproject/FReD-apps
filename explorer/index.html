@@ -7,11 +7,13 @@
 
   <!-- Stylesheets -->
   <link rel="stylesheet" href="../shared/css/theme.css">
-  <link rel="stylesheet" href="css/explorer.css">
 
   <!-- DataTables CSS -->
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
   <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
+
+  <!-- App CSS (after DataTables to allow overrides) -->
+  <link rel="stylesheet" href="css/explorer.css">
 
   <!-- Plotly -->
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
@@ -121,10 +123,16 @@
           </div>
         </div>
 
-        <!-- Effect Count -->
-        <div class="effect-count">
-          <div style="font-size: 0.8125rem; color: var(--fred-text-muted); margin-bottom: 0.25rem;">Effects</div>
-          <div class="effect-count-number" id="study-count">0</div>
+        <!-- Counts -->
+        <div class="sidebar-counts">
+          <div class="count-item">
+            <div class="count-label">Effects</div>
+            <div class="count-number" id="study-count">0</div>
+          </div>
+          <div class="count-item">
+            <div class="count-label">Replications</div>
+            <div class="count-number" id="replication-count">0</div>
+          </div>
         </div>
       </aside>
 
@@ -158,25 +166,18 @@
           <div class="card">
             <div class="card-header">
               Effects
-              <div class="btn-group" style="float: right;">
-                <button class="btn btn-sm btn-secondary" id="btn-copy">Copy</button>
-                <button class="btn btn-sm btn-secondary" id="btn-csv">CSV</button>
-                <button class="btn btn-sm btn-secondary" id="btn-excel">Excel</button>
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: auto;">
+                <div id="column-selector-container"></div>
+                <div class="btn-group">
+                  <button class="btn btn-sm btn-secondary" id="btn-copy">Copy</button>
+                  <button class="btn btn-sm btn-secondary" id="btn-csv">CSV</button>
+                  <button class="btn btn-sm btn-secondary" id="btn-excel">Excel</button>
+                </div>
               </div>
             </div>
             <div class="card-body">
               <table id="studies-table" class="display" style="width:100%">
-                <thead>
-                  <tr>
-                    <th></th>
-                    <th>Description</th>
-                    <th>Tags</th>
-                    <th>Result</th>
-                    <th>Original Reference</th>
-                    <th>Replication Reference</th>
-                    <th>Link</th>
-                  </tr>
-                </thead>
+                <thead></thead>
                 <tbody></tbody>
               </table>
             </div>
@@ -186,9 +187,8 @@
         <!-- Tab Content: Forest Plot -->
         <div class="tab-content" id="tab-forest">
           <div class="card">
-            <div class="card-header">Forest Plot (Blobbogram)</div>
+            <div class="card-header">Forest Plot</div>
             <div class="card-body">
-              <p class="text-muted">Grey dots = original effect sizes. Black dots = replication effect sizes.</p>
               <div class="plot-container" id="forestplot" style="min-height: 600px;"></div>
             </div>
           </div>
@@ -204,9 +204,9 @@
           </div>
 
           <div class="card">
-            <div class="card-header">Outcomes by Journal</div>
+            <div class="card-header">Outcomes by Discipline</div>
             <div class="card-body">
-              <div class="plot-container" id="journal-chart" style="min-height: 600px;"></div>
+              <div class="plot-container" id="discipline-chart" style="min-height: 400px;"></div>
             </div>
           </div>
         </div>
@@ -276,8 +276,8 @@
 
         <h4>Links</h4>
         <ul>
-          <li><a href="https://forrt.org/replication-database/" target="_blank">FReD Website</a></li>
-          <li><a href="https://github.com/forrtproject/FReD" target="_blank">FReD R Package</a></li>
+          <li><a href="https://forrt.org/replication-hub/" target="_blank">FORRT Replication Hub</a></li>
+          <li><a href="https://forrt.org/FReD/index.html" target="_blank">FReD R Package</a></li>
           <li><a href="https://osf.io/9r62x/" target="_blank">FReD on OSF</a></li>
         </ul>
       </div>
@@ -307,18 +307,22 @@
           analyze replication studies across psychology and related fields.
         </p>
         <p>
-          Use the filters on the left to narrow down studies by source project, statistical power,
-          or search terms. Select different success criteria to see how outcomes vary based on
+          Use the filters on the left to narrow down studies.
+          Select different success criteria to see how outcomes vary based on
           different definitions of replication success.
         </p>
         <p>
-          <strong>Note:</strong> This is a static version of the FReD Explorer. For the full
-          interactive experience with real-time calculations, use the
+          <strong>Note:</strong> You can download all data for further analyses. We also offer an R package that
+          provides some functionality that goes beyond this Explorer. Check out the
           <a href="https://github.com/forrtproject/FReD" target="_blank">FReD R package</a>.
         </p>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-primary" onclick="document.getElementById('welcome-modal').classList.remove('active')">Get Started</button>
+        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; cursor: pointer;">
+          <input type="checkbox" id="welcome-dont-show">
+          Don't show this again
+        </label>
+        <button class="btn btn-primary" id="welcome-close-btn">Get Started</button>
       </div>
     </div>
   </div>
@@ -337,6 +341,7 @@
   <script src="../shared/js/data-loader.js"></script>
   <script src="js/state.js"></script>
   <script src="js/filters.js"></script>
+  <script src="js/column-config.js"></script>
   <script src="js/charts/scatterplot.js"></script>
   <script src="js/charts/barchart.js"></script>
   <script src="js/charts/forestplot.js"></script>

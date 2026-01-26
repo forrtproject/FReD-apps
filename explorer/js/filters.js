@@ -26,7 +26,8 @@ FReD.filters = {
       criterionSelect: document.getElementById('success-criterion'),
       // Support both old radio buttons and new dropdown
       criterionRadios: document.querySelectorAll('input[name="criterion"]'),
-      studyCount: document.getElementById('study-count')
+      studyCount: document.getElementById('study-count'),
+      replicationCount: document.getElementById('replication-count')
     };
 
     // Create debounced search
@@ -144,6 +145,42 @@ FReD.filters = {
     this.elements.studyCount.textContent = count === total
       ? count.toLocaleString()
       : `${count.toLocaleString()} of ${total.toLocaleString()}`;
+  },
+
+  /**
+   * Count unique replications in a set of studies
+   * Replications are defined by unique combinations of:
+   * doi_o, doi_r (coalesced with url_r), study_r, and study_o
+   */
+  countReplications(studies) {
+    const seen = new Set();
+    studies.forEach(study => {
+      // Coalesce doi_r with url_r
+      const doiR = study.doi_r || study.url_r || '';
+      // Build key from all identifying fields
+      const key = [
+        study.doi_o || '',
+        doiR,
+        study.study_r || '',
+        study.study_o || ''
+      ].join('|');
+      seen.add(key);
+    });
+    return seen.size;
+  },
+
+  /**
+   * Update replication count display
+   */
+  updateReplicationCount(filteredStudies, allStudies) {
+    if (!this.elements.replicationCount) return;
+
+    const filteredCount = this.countReplications(filteredStudies);
+    const totalCount = this.countReplications(allStudies);
+
+    this.elements.replicationCount.textContent = filteredCount === totalCount
+      ? filteredCount.toLocaleString()
+      : `${filteredCount.toLocaleString()} of ${totalCount.toLocaleString()}`;
   },
 
   /**

@@ -130,9 +130,16 @@ input[type="file"].form-control {
   max-height: 120px;
 }
 
-/* Selected row styling */
-table.dataTable tbody tr.selected {
-  background-color: rgba(166, 40, 40, 0.1) !important;
+/* Selected row styling - override DataTables blue selection */
+table.dataTable tbody tr.selected,
+table.dataTable tbody tr.selected td {
+  background-color: rgba(166, 40, 40, 0.15) !important;
+}
+
+/* DataTables select plugin overrides for dark mode */
+table.dataTable.display tbody tr.selected > .sorting_1,
+table.dataTable.order-column.stripe tbody tr.selected > .sorting_1 {
+  background-color: rgba(166, 40, 40, 0.15) !important;
 }
 
 /* Outcome badge in table */
@@ -142,6 +149,8 @@ table.dataTable tbody tr.selected {
   font-size: 0.75rem;
   font-weight: 500;
   border-radius: 0.25rem;
+  min-width: 80px;
+  text-align: center;
 }
 
 .outcome-badge.success {
@@ -152,6 +161,11 @@ table.dataTable tbody tr.selected {
 .outcome-badge.failure {
   background: var(--fred-failure);
   color: #721c24;
+}
+
+.outcome-badge.mixed {
+  background: var(--fred-mixed);
+  color: #856404;
 }
 
 .outcome-badge.not-coded {
@@ -167,6 +181,54 @@ table.dataTable tbody tr.selected {
 
 .retracted-warning::before {
   content: "RETRACTED: ";
+}
+
+/* Retraction badge */
+.retraction-badge {
+  display: inline-block;
+  padding: 0.15em 0.4em;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: #991B1B;
+  color: #fff;
+  border-radius: 0.25rem;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+.retraction-count {
+  color: #991B1B;
+}
+
+/* Retracted item in list */
+.retracted-item {
+  border-left: 3px solid #991B1B;
+  padding-left: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Retraction check section styling */
+.retraction-check-section {
+  border: 1px solid var(--fred-border);
+}
+
+[data-theme="dark"] .retraction-check-section {
+  background: rgba(30, 41, 59, 0.5);
+  border-color: var(--fred-border);
+}
+
+[data-theme="dark"] .retraction-badge {
+  background: #B91C1C;
+  color: #FEE2E2;
+}
+
+[data-theme="dark"] .retraction-count {
+  color: #F87171;
+}
+
+[data-theme="dark"] .retracted-item {
+  border-left-color: #B91C1C;
 }
 
 /* Print styles */
@@ -222,29 +284,68 @@ table.dataTable tbody tr.selected {
 }
 
 /* Dark mode support */
-[data-theme="dark"] table.dataTable {
+
+/* Text area - matches page background with visible border */
+[data-theme="dark"] #reference-input {
+  background: var(--fred-bg);
   color: var(--fred-text);
+  border: 1px solid var(--fred-border);
+}
+
+[data-theme="dark"] #reference-input:focus {
+  border-color: var(--fred-primary);
+  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.15);
+}
+
+[data-theme="dark"] #reference-input::placeholder {
+  color: var(--fred-text-muted);
+}
+
+/* DOI preview */
+[data-theme="dark"] #doi-list {
+  background: var(--fred-bg);
+  color: var(--fred-text-secondary);
+  border: 1px solid var(--fred-border);
+}
+
+/* Tables - ensure readability */
+[data-theme="dark"] table.dataTable {
+  color: var(--fred-text-secondary);
 }
 
 [data-theme="dark"] table.dataTable thead th {
-  background: var(--fred-bg-alt);
-  border-bottom-color: var(--fred-border);
-  color: var(--fred-text);
+  background: #1E293B;
+  color: #F1F5F9;
+  border-bottom: 2px solid #475569;
 }
 
 [data-theme="dark"] table.dataTable tbody td {
-  border-bottom-color: var(--fred-border);
+  color: #CBD5E1;
+  border-bottom: 1px solid #334155;
+}
+
+[data-theme="dark"] table.dataTable tbody td a {
+  color: var(--fred-accent-teal);
+}
+
+[data-theme="dark"] table.dataTable tbody td a:hover {
+  color: #7FE0E3;
 }
 
 [data-theme="dark"] table.dataTable tbody tr:hover {
-  background-color: var(--fred-bg-alt);
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 [data-theme="dark"] .dataTables_wrapper .dataTables_filter input,
 [data-theme="dark"] .dataTables_wrapper .dataTables_length select {
-  background: var(--fred-bg-card);
+  background: var(--fred-bg);
   color: var(--fred-text);
-  border-color: var(--fred-border);
+  border: 1px solid var(--fred-border);
+}
+
+[data-theme="dark"] .dataTables_wrapper .dataTables_filter input:focus {
+  border-color: var(--fred-primary);
+  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.15);
 }
 
 [data-theme="dark"] .dataTables_wrapper .dataTables_info {
@@ -252,12 +353,13 @@ table.dataTable tbody tr.selected {
 }
 
 [data-theme="dark"] .dataTables_paginate .paginate_button {
-  color: var(--fred-text) !important;
-  border-color: var(--fred-border);
+  color: var(--fred-text-secondary) !important;
+  border: 1px solid var(--fred-border);
+  background: transparent;
 }
 
 [data-theme="dark"] .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) {
-  background: var(--fred-bg-alt);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--fred-text) !important;
 }
 
@@ -267,11 +369,251 @@ table.dataTable tbody tr.selected {
   border-color: var(--fred-primary);
 }
 
+/* Outcome badges - high contrast for dark mode */
+[data-theme="dark"] .outcome-badge.success {
+  background: #166534;
+  color: #BBF7D0;
+}
+
+[data-theme="dark"] .outcome-badge.failure {
+  background: #991B1B;
+  color: #FECACA;
+}
+
+[data-theme="dark"] .outcome-badge.mixed {
+  background: #A16207;  /* Dark yellow */
+  color: #FEF9C3;
+}
+
+[data-theme="dark"] .outcome-badge.not-coded {
+  background: #334155;
+  color: #94A3B8;
+}
+
+/* Result icons in report */
+[data-theme="dark"] .result-success {
+  color: #6EBF6E;
+}
+
+[data-theme="dark"] .result-failure {
+  color: #E87070;
+}
+
+[data-theme="dark"] .result-mixed {
+  color: #F0B080;
+}
+
+[data-theme="dark"] .result-na {
+  color: #9A9A9A;
+}
+
+/* Report view */
+[data-theme="dark"] .report-view {
+  background: var(--fred-bg-card);
+  color: var(--fred-text-secondary);
+  border: 1px solid var(--fred-border);
+}
+
+[data-theme="dark"] .report-view h1 {
+  color: var(--fred-text);
+  border-bottom-color: var(--fred-primary);
+}
+
+[data-theme="dark"] .report-view h2,
+[data-theme="dark"] .report-view h3,
+[data-theme="dark"] .report-view h4,
+[data-theme="dark"] .report-view h5 {
+  color: var(--fred-text);
+}
+
 [data-theme="dark"] .report-view th {
-  background: var(--fred-bg-alt);
+  background: #1E293B;
+  color: #F1F5F9;
+}
+
+[data-theme="dark"] .report-view td {
+  color: #CBD5E1;
+}
+
+[data-theme="dark"] .report-view a {
+  color: var(--fred-accent-teal);
 }
 
 [data-theme="dark"] #markdown-source {
+  background: var(--fred-bg);
+  color: var(--fred-text-secondary);
+  border: 1px solid var(--fred-border);
+}
+
+/* Selected row styling for dark mode - muted selection */
+[data-theme="dark"] table.dataTable tbody tr.selected,
+[data-theme="dark"] table.dataTable tbody tr.selected td,
+[data-theme="dark"] table.dataTable.display tbody tr.selected > .sorting_1,
+[data-theme="dark"] table.dataTable.order-column.stripe tbody tr.selected > .sorting_1 {
+  background-color: rgba(148, 163, 184, 0.15) !important;  /* Muted slate blue */
+}
+
+/* Make table text colors consistent between results and database tables */
+[data-theme="dark"] #results-table tbody td,
+[data-theme="dark"] #database-table tbody td {
+  color: var(--fred-text-secondary);
+}
+
+[data-theme="dark"] #results-table tbody td a,
+[data-theme="dark"] #database-table tbody td a {
+  color: var(--fred-accent-teal);
+}
+
+/* Row details styling */
+.row-details {
+  padding: 1rem;
   background: var(--fred-bg-alt);
+  border-left: 3px solid var(--fred-primary);
+}
+
+.row-details h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.9rem;
   color: var(--fred-text);
+}
+
+.row-details ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.875rem;
+}
+
+.row-details li {
+  margin-bottom: 0.5rem;
+  color: var(--fred-text-secondary);
+}
+
+.row-details a {
+  color: var(--fred-primary);
+}
+
+[data-theme="dark"] .row-details {
+  background: rgba(30, 41, 59, 0.5);
+}
+
+[data-theme="dark"] .row-details a {
+  color: var(--fred-accent-teal);
+}
+
+/* Details toggle button */
+td.details-control {
+  cursor: pointer;
+  text-align: center;
+  color: var(--fred-text-muted);
+  width: 20px;
+}
+
+td.details-control::before {
+  content: '›';
+  font-weight: bold;
+  font-size: 1.25rem;
+  display: inline-block;
+  transition: transform 0.2s ease;
+}
+
+tr.shown td.details-control::before {
+  transform: rotate(90deg);
+}
+
+tr.shown td.details-control {
+  color: var(--fred-primary);
+}
+
+/* Custom file upload button */
+.file-upload-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.file-upload-wrapper input[type="file"] {
+  display: none;
+}
+
+.custom-file-upload {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  background-color: transparent;
+  border: 1px solid var(--fred-primary);
+  color: var(--fred-primary);
+  border-radius: 0.25rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.custom-file-upload:hover {
+  background-color: rgba(63, 5, 8, 0.1);
+}
+
+[data-theme="dark"] .custom-file-upload {
+  border-color: var(--fred-primary);
+  color: var(--fred-primary);
+}
+
+[data-theme="dark"] .custom-file-upload:hover {
+  background-color: rgba(225, 29, 72, 0.15);
+}
+
+.file-chosen {
+  color: var(--fred-text-muted);
+  font-size: 0.875rem;
+}
+
+/* Legacy file input styling (for browsers that don't support custom) */
+[data-theme="dark"] input[type="file"].form-control {
+  background: var(--fred-bg);
+  border: 1px solid var(--fred-border);
+  color: var(--fred-text-secondary);
+}
+
+/* DOI Lookup section */
+.doi-lookup-section {
+  border: 1px solid var(--fred-border);
+}
+
+.doi-lookup-section input[type="email"] {
+  background: var(--fred-bg-card);
+  color: var(--fred-text);
+  border: 1px solid var(--fred-border);
+  border-radius: 0.25rem;
+}
+
+.doi-lookup-section input[type="email"]:focus {
+  border-color: var(--fred-primary);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(166, 40, 40, 0.15);
+}
+
+.doi-lookup-section input[type="email"]::placeholder {
+  color: var(--fred-text-muted);
+  font-size: 0.8125rem;
+}
+
+[data-theme="dark"] .doi-lookup-section {
+  background: rgba(30, 41, 59, 0.5);
+  border-color: var(--fred-border);
+}
+
+[data-theme="dark"] .doi-lookup-section input[type="email"] {
+  background: var(--fred-bg);
+  color: var(--fred-text);
+  border-color: var(--fred-border);
+}
+
+[data-theme="dark"] .doi-lookup-section input[type="email"]:focus {
+  border-color: var(--fred-primary);
+  box-shadow: 0 0 0 2px rgba(225, 29, 72, 0.15);
+}
+
+/* Button disabled state */
+#btn-lookup-dois:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }

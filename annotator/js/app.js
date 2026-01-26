@@ -1,5 +1,5 @@
 /**
- * FReD Annotator - Main Application
+ * FLoRA Annotator - Main Application
  *
  * Coordinates all components of the Annotator app
  */
@@ -10,7 +10,12 @@ FReD.annotator = {
   // Data
   floraData: null,
   selectedDOIs: new Set(),
+  inputDOIs: new Set(),  // DOIs from text input or file (not manual selection)
   matchedStudies: [],
+
+  // Retraction data
+  retractedDOIs: new Map(),  // DOI -> retraction info
+  checkRetractions: false,   // Whether retraction checking is enabled
 
   // DataTables
   resultsTable: null,
@@ -20,10 +25,10 @@ FReD.annotator = {
    * Initialize the application
    */
   async init() {
-    console.log('Initializing FReD Annotator...');
+    console.log('Initializing FLoRA Annotator...');
 
-    // Show welcome modal
-    document.getElementById('welcome-modal').classList.add('active');
+    // Show welcome modal (unless user opted out)
+    this.initWelcomeModal();
 
     // Setup event listeners
     this.setupEventListeners();
@@ -31,12 +36,12 @@ FReD.annotator = {
     // Setup tabs
     this.setupTabs();
 
+    // Setup reference tooltips
+    this.setupTooltips();
+
     // Listen for theme changes
     window.addEventListener('themechange', () => {
       this.updateResults();
-      if (document.querySelector('.tab[data-tab="report"]')?.classList.contains('active')) {
-        this.renderReplicabilityPlot();
-      }
     });
 
     // Load data
@@ -46,6 +51,32 @@ FReD.annotator = {
       console.error('Failed to load data:', error);
       FReD.utils.showNotification('Failed to load data. Please try refreshing.', 'error');
     }
+  },
+
+  /**
+   * Initialize welcome modal with "don't show again" functionality
+   */
+  initWelcomeModal() {
+    const STORAGE_KEY = 'flora-annotator-welcome-dismissed';
+    const modal = document.getElementById('welcome-modal');
+    const closeBtn = document.getElementById('welcome-close-btn');
+    const dontShowCheckbox = document.getElementById('welcome-dont-show');
+
+    // Check if user has opted out
+    if (localStorage.getItem(STORAGE_KEY) === 'true') {
+      return; // Don't show modal
+    }
+
+    // Show modal
+    modal.classList.add('active');
+
+    // Handle close button
+    closeBtn?.addEventListener('click', () => {
+      if (dontShowCheckbox?.checked) {
+        localStorage.setItem(STORAGE_KEY, 'true');
+      }
+      modal.classList.remove('active');
+    });
   },
 
   /**
@@ -71,9 +102,19 @@ FReD.annotator = {
    * Setup event listeners
    */
   setupEventListeners() {
-    // Process button
+    // Process button (initial state)
     document.getElementById('btn-process')?.addEventListener('click', () => {
       this.processInput();
+    });
+
+    // Add to selection button (shown after DOIs added)
+    document.getElementById('btn-add-refs')?.addEventListener('click', () => {
+      this.processInput(false); // Add mode
+    });
+
+    // Replace selection button (shown after DOIs added)
+    document.getElementById('btn-replace-refs')?.addEventListener('click', () => {
+      this.processInput(true); // Replace mode
     });
 
     // Clear button
@@ -83,8 +124,16 @@ FReD.annotator = {
 
     // File upload
     document.getElementById('file-upload')?.addEventListener('change', (e) => {
+      const fileChosen = document.getElementById('file-chosen');
       if (e.target.files.length > 0) {
+        if (fileChosen) {
+          fileChosen.textContent = e.target.files[0].name;
+        }
         this.processFile(e.target.files[0]);
+      } else {
+        if (fileChosen) {
+          fileChosen.textContent = 'No file chosen';
+        }
       }
     });
 
@@ -100,22 +149,20 @@ FReD.annotator = {
       FReD.utils.copyToClipboard(dois);
     });
 
+    // DOI Lookup via CrossRef
+    document.getElementById('btn-lookup-dois')?.addEventListener('click', () => {
+      this.lookupDOIs();
+    });
+
     // Report buttons
     document.getElementById('btn-copy-report')?.addEventListener('click', () => {
       const reportHtml = document.getElementById('report-container').innerHTML;
       FReD.utils.copyToClipboard(FReD.reportGenerator.htmlToText(reportHtml));
     });
 
-    document.getElementById('btn-toggle-markdown')?.addEventListener('click', () => {
+    document.getElementById('btn-copy-markdown')?.addEventListener('click', () => {
       const mdSource = document.getElementById('markdown-source');
-      const reportView = document.getElementById('report-container');
-      if (mdSource.style.display === 'none') {
-        mdSource.style.display = 'block';
-        reportView.style.display = 'none';
-      } else {
-        mdSource.style.display = 'none';
-        reportView.style.display = 'block';
-      }
+      FReD.utils.copyToClipboard(mdSource.textContent);
     });
 
     document.getElementById('btn-print')?.addEventListener('click', () => {
@@ -137,6 +184,107 @@ FReD.annotator = {
   },
 
   /**
+   * Setup reference tooltips for the results table
+   */
+  setupTooltips() {
+    // Create tooltip element
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tooltip-popup';
+    tooltip.style.display = 'none';
+    document.body.appendChild(tooltip);
+
+    let hideTimeout = null;
+    let currentTarget = null;
+
+    const showTooltip = (target) => {
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+        hideTimeout = null;
+      }
+
+      currentTarget = target;
+      const text = target.dataset.tooltip;
+      const link = target.dataset.link;
+
+      // Build tooltip content with buttons
+      let html = `<div class="tooltip-text">${FReD.utils.escapeHtml(text)}</div>`;
+      html += `<div class="tooltip-actions">`;
+      html += `<button class="tooltip-btn tooltip-copy" title="Copy reference">📋 Copy</button>`;
+      if (link) {
+        html += `<a href="${FReD.utils.escapeHtml(link)}" target="_blank" class="tooltip-btn tooltip-link" title="Open paper">🔗 Open</a>`;
+      }
+      html += `</div>`;
+
+      tooltip.innerHTML = html;
+      tooltip.style.display = 'block';
+
+      // Position tooltip
+      const rect = target.getBoundingClientRect();
+      const tooltipRect = tooltip.getBoundingClientRect();
+
+      let top = rect.top - tooltipRect.height - 8;
+      let left = rect.left;
+
+      if (top < 10) {
+        top = rect.bottom + 8;
+      }
+
+      if (left + tooltipRect.width > window.innerWidth - 10) {
+        left = window.innerWidth - tooltipRect.width - 10;
+      }
+      if (left < 10) left = 10;
+
+      tooltip.style.top = top + 'px';
+      tooltip.style.left = left + 'px';
+
+      // Setup copy button
+      tooltip.querySelector('.tooltip-copy')?.addEventListener('click', () => {
+        navigator.clipboard.writeText(text).then(() => {
+          const btn = tooltip.querySelector('.tooltip-copy');
+          btn.textContent = '✓ Copied!';
+          setTimeout(() => { btn.textContent = '📋 Copy'; }, 1500);
+        });
+      });
+    };
+
+    const hideTooltip = () => {
+      hideTimeout = setTimeout(() => {
+        tooltip.style.display = 'none';
+        currentTarget = null;
+      }, 150);
+    };
+
+    // Show on hover over reference
+    document.addEventListener('mouseover', (e) => {
+      const target = e.target.closest('.ref-tooltip');
+      if (target && target.dataset.tooltip) {
+        showTooltip(target);
+      }
+    });
+
+    // Hide when leaving reference (with delay)
+    document.addEventListener('mouseout', (e) => {
+      const target = e.target.closest('.ref-tooltip');
+      if (target) {
+        hideTooltip();
+      }
+    });
+
+    // Keep visible when hovering over tooltip
+    tooltip.addEventListener('mouseenter', () => {
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+        hideTimeout = null;
+      }
+    });
+
+    // Hide when leaving tooltip
+    tooltip.addEventListener('mouseleave', () => {
+      hideTooltip();
+    });
+  },
+
+  /**
    * Switch to a tab
    */
   switchTab(tabId) {
@@ -150,14 +298,131 @@ FReD.annotator = {
     // Update content based on tab
     if (tabId === 'report') {
       this.updateReport();
-      this.renderReplicabilityPlot();
     }
   },
 
   /**
-   * Process text input
+   * Look up DOIs via CrossRef for references without DOIs
    */
-  async processInput() {
+  async lookupDOIs() {
+    const textInput = document.getElementById('reference-input').value;
+    const emailInput = document.getElementById('crossref-email');
+    const lookupBtn = document.getElementById('btn-lookup-dois');
+    const email = emailInput?.value?.trim();
+
+    if (!textInput.trim()) {
+      FReD.utils.showNotification('Please enter some references first.', 'warning');
+      return;
+    }
+
+    if (!email || !FReD.doiParser.isValidEmail(email)) {
+      FReD.utils.showNotification('Please enter a valid email address (required by CrossRef).', 'warning');
+      emailInput?.focus();
+      return;
+    }
+
+    // Parse references from the input
+    const references = FReD.doiParser.splitIntoReferences(textInput);
+
+    if (references.length === 0) {
+      FReD.utils.showNotification('No references found to look up.', 'warning');
+      return;
+    }
+
+    // Count how many already have DOIs
+    const withoutDOIs = references.filter(ref => FReD.doiParser.extractFromText(ref).length === 0);
+
+    if (withoutDOIs.length === 0) {
+      FReD.utils.showNotification('All references already contain DOIs!', 'info');
+      return;
+    }
+
+    // Disable button and show progress
+    const originalText = lookupBtn.textContent;
+    lookupBtn.disabled = true;
+    lookupBtn.textContent = `Looking up (0/${withoutDOIs.length})...`;
+
+    try {
+      // Progress callback
+      let processed = 0;
+      const onProgress = (current, total, ref, doi) => {
+        // Only count references that needed lookup
+        if (!FReD.doiParser.extractFromText(ref).some(d => d === doi)) {
+          processed++;
+        }
+        lookupBtn.textContent = `Looking up (${processed}/${withoutDOIs.length})...`;
+      };
+
+      const { results, stats } = await FReD.doiParser.lookupDOIs(references, email, onProgress);
+
+      // Update the text input with DOIs added
+      const updatedText = this.augmentReferencesWithDOIs(textInput, results);
+      document.getElementById('reference-input').value = updatedText;
+
+      // Show results
+      const newlyFound = results.filter(r => r.source === 'crossref').length;
+      const existing = results.filter(r => r.source === 'existing').length;
+
+      let message = `DOI lookup complete: ${newlyFound} DOI(s) found via CrossRef`;
+      if (existing > 0) {
+        message += `, ${existing} already had DOIs`;
+      }
+      if (stats.notFound > 0) {
+        message += `, ${stats.notFound} not found`;
+      }
+
+      FReD.utils.showNotification(message, newlyFound > 0 ? 'success' : 'info');
+
+    } catch (error) {
+      console.error('DOI lookup error:', error);
+      FReD.utils.showNotification(`DOI lookup failed: ${error.message}`, 'error');
+    } finally {
+      lookupBtn.disabled = false;
+      lookupBtn.textContent = originalText;
+    }
+  },
+
+  /**
+   * Augment reference text with found DOIs
+   */
+  augmentReferencesWithDOIs(originalText, results) {
+    // Create a map of reference -> DOI for newly found DOIs
+    const doiMap = new Map();
+    results.forEach(r => {
+      if (r.doi && r.source === 'crossref') {
+        doiMap.set(r.reference, r.doi);
+      }
+    });
+
+    if (doiMap.size === 0) {
+      return originalText;
+    }
+
+    // Split text into lines and augment those that got DOIs
+    const lines = originalText.split('\n');
+    const updatedLines = lines.map(line => {
+      const trimmed = line.trim();
+      // Check if this line matches any reference that got a DOI
+      for (const [ref, doi] of doiMap.entries()) {
+        // Simple matching: check if the line contains the reference or vice versa
+        if (trimmed && (trimmed.includes(ref) || ref.includes(trimmed))) {
+          // Don't add if already has this DOI
+          if (!line.toLowerCase().includes(doi)) {
+            return `${line} https://doi.org/${doi}`;
+          }
+        }
+      }
+      return line;
+    });
+
+    return updatedLines.join('\n');
+  },
+
+  /**
+   * Process text input
+   * @param {boolean} replace - If true, replace existing selection; if false, add to it
+   */
+  async processInput(replace = false) {
     const textInput = document.getElementById('reference-input').value;
 
     if (!textInput.trim()) {
@@ -166,9 +431,22 @@ FReD.annotator = {
     }
 
     const dois = FReD.doiParser.extractFromText(textInput);
-    this.addDOIs(dois);
 
-    FReD.utils.showNotification(`Found ${dois.length} DOI(s) from text input.`, 'info');
+    if (replace) {
+      // Clear existing DOIs before adding new ones
+      this.selectedDOIs.clear();
+      this.inputDOIs.clear();
+      this.matchedStudies = [];
+      this.retractedDOIs.clear();
+    }
+
+    // Update retraction check setting from checkbox
+    this.checkRetractions = document.getElementById('check-retractions')?.checked || false;
+
+    await this.addDOIs(dois);
+
+    const action = replace ? 'Replaced with' : 'Found';
+    FReD.utils.showNotification(`${action} ${dois.length} DOI(s) from text input.`, 'info');
 
     // Switch to selection tab
     this.switchTab('selection');
@@ -180,9 +458,12 @@ FReD.annotator = {
   async processFile(file) {
     FReD.utils.showNotification(`Processing ${file.name}...`, 'info');
 
+    // Update retraction check setting from checkbox
+    this.checkRetractions = document.getElementById('check-retractions')?.checked || false;
+
     try {
       const dois = await FReD.doiParser.extractFromFile(file);
-      this.addDOIs(dois);
+      await this.addDOIs(dois);
       FReD.utils.showNotification(`Found ${dois.length} DOI(s) from ${file.name}.`, 'info');
       this.switchTab('selection');
     } catch (error) {
@@ -192,13 +473,84 @@ FReD.annotator = {
   },
 
   /**
-   * Add DOIs to selection
+   * Add DOIs to selection (from text input or file)
    */
-  addDOIs(dois) {
-    dois.forEach(doi => this.selectedDOIs.add(doi.toLowerCase()));
+  async addDOIs(dois) {
+    dois.forEach(doi => {
+      const normalizedDoi = doi.toLowerCase();
+      this.selectedDOIs.add(normalizedDoi);
+      this.inputDOIs.add(normalizedDoi);  // Track as user-provided input
+    });
     this.updateDOIPreview();
+    this.updateProcessButtons();
     this.matchStudies();
+
+    // Check for retractions if enabled
+    if (this.checkRetractions) {
+      await this.checkForRetractions();
+    }
+
     this.updateResults();
+  },
+
+  /**
+   * Check selected DOIs for retractions
+   */
+  async checkForRetractions() {
+    const btn = document.getElementById('btn-process');
+    const addBtn = document.getElementById('btn-add-refs');
+    const replaceBtn = document.getElementById('btn-replace-refs');
+
+    // Disable buttons during check
+    [btn, addBtn, replaceBtn].forEach(b => {
+      if (b) b.disabled = true;
+    });
+
+    try {
+      FReD.utils.showNotification('Loading Retraction Watch database...', 'info');
+
+      // Load retraction data if not already loaded
+      await FReD.retractionChecker.loadData();
+
+      // Check all selected DOIs
+      this.retractedDOIs = FReD.retractionChecker.checkDOIs(this.selectedDOIs);
+
+      if (this.retractedDOIs.size > 0) {
+        FReD.utils.showNotification(
+          `Found ${this.retractedDOIs.size} retracted article(s).`,
+          'warning'
+        );
+      } else {
+        FReD.utils.showNotification('No retracted articles found.', 'success');
+      }
+
+    } catch (error) {
+      console.error('Retraction check failed:', error);
+      FReD.utils.showNotification(
+        'Failed to check for retractions. The Retraction Watch database may be unavailable.',
+        'error'
+      );
+    } finally {
+      // Re-enable buttons
+      [btn, addBtn, replaceBtn].forEach(b => {
+        if (b) b.disabled = false;
+      });
+    }
+  },
+
+  /**
+   * Update process button visibility based on whether DOIs have been added
+   */
+  updateProcessButtons() {
+    const btnProcess = document.getElementById('btn-process');
+    const btnAdd = document.getElementById('btn-add-refs');
+    const btnReplace = document.getElementById('btn-replace-refs');
+
+    const hasDOIs = this.selectedDOIs.size > 0;
+
+    if (btnProcess) btnProcess.style.display = hasDOIs ? 'none' : '';
+    if (btnAdd) btnAdd.style.display = hasDOIs ? '' : 'none';
+    if (btnReplace) btnReplace.style.display = hasDOIs ? '' : 'none';
   },
 
   /**
@@ -207,9 +559,16 @@ FReD.annotator = {
   clearInput() {
     document.getElementById('reference-input').value = '';
     document.getElementById('file-upload').value = '';
+    const fileChosen = document.getElementById('file-chosen');
+    if (fileChosen) {
+      fileChosen.textContent = 'No file chosen';
+    }
     this.selectedDOIs.clear();
+    this.inputDOIs.clear();
     this.matchedStudies = [];
+    this.retractedDOIs.clear();
     this.updateDOIPreview();
+    this.updateProcessButtons();
     this.updateResults();
   },
 
@@ -258,38 +617,54 @@ FReD.annotator = {
    * Update results display
    */
   updateResults() {
-    this.updateCoverageChart();
+    this.updateCoverageNote();
     this.updateResultsTable();
     this.updateOutcomeChart();
   },
 
   /**
-   * Update coverage chart - simple stacked bar showing DOI coverage
+   * Update coverage display - text note showing DOI coverage
    */
-  updateCoverageChart() {
+  updateCoverageNote() {
     const container = document.getElementById('coverage-chart');
-    if (!container || this.selectedDOIs.size === 0) {
-      if (container) container.innerHTML = '';
+    if (!container) return;
+
+    // If no DOIs at all, hide the container
+    if (this.selectedDOIs.size === 0) {
+      container.innerHTML = '';
       return;
     }
 
-    const matched = new Set(this.matchedStudies.map(s => s.doi_original?.toLowerCase()));
-    const inFReD = [...this.selectedDOIs].filter(doi => matched.has(doi)).length;
-    const notInFReD = this.selectedDOIs.size - inFReD;
-    const total = this.selectedDOIs.size;
-    const pctInFReD = ((inFReD / total) * 100).toFixed(1);
-    const pctNotInFReD = ((notInFReD / total) * 100).toFixed(1);
+    // Count input DOIs that have replications in FLoRA
+    const matchedOriginalDOIs = new Set(this.matchedStudies.map(s => s.doi_original?.toLowerCase()));
+    const inputWithReplications = [...this.inputDOIs].filter(doi => matchedOriginalDOIs.has(doi)).length;
 
-    // Simple HTML-based coverage bar instead of Plotly pie chart
-    container.innerHTML = `
-      <div style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--fred-text);">
-        <strong>${total}</strong> DOIs submitted &bull; <strong>${inFReD}</strong> found in FReD (${pctInFReD}%)
-      </div>
-      <div style="display: flex; height: 24px; border-radius: 4px; overflow: hidden; background: #ddd;">
-        ${inFReD > 0 ? `<div style="width: ${pctInFReD}%; background: #8FBC8F; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 500;">${inFReD > 0 && parseFloat(pctInFReD) >= 10 ? 'In FReD' : ''}</div>` : ''}
-        ${notInFReD > 0 ? `<div style="width: ${pctNotInFReD}%; background: #C8C8C8; display: flex; align-items: center; justify-content: center; color: #666; font-size: 12px; font-weight: 500;">${notInFReD > 0 && parseFloat(pctNotInFReD) >= 15 ? 'Not in FReD' : ''}</div>` : ''}
-      </div>
-    `;
+    // Count manually selected DOIs (from database table, not from input)
+    const manuallySelected = [...this.selectedDOIs].filter(doi => !this.inputDOIs.has(doi)).length;
+
+    // Build the text note
+    let noteHtml = '<p style="font-size: 0.9rem; color: var(--fred-text); margin: 0;">';
+
+    if (this.inputDOIs.size > 0) {
+      noteHtml += `Of <strong>${this.inputDOIs.size}</strong> provided DOI${this.inputDOIs.size !== 1 ? 's' : ''}, <strong>${inputWithReplications}</strong> ${inputWithReplications === 1 ? 'has' : 'have'} replications in FLoRA`;
+
+      // Add retraction info
+      if (this.retractedDOIs.size > 0) {
+        noteHtml += ` and <strong class="retraction-count">${this.retractedDOIs.size}</strong> ${this.retractedDOIs.size === 1 ? 'has' : 'have'} been retracted`;
+      }
+      noteHtml += '.';
+    }
+
+    if (manuallySelected > 0) {
+      if (this.inputDOIs.size > 0) {
+        noteHtml += ` <strong>${manuallySelected}</strong> additional ${manuallySelected === 1 ? 'study has' : 'studies have'} been manually selected.`;
+      } else {
+        noteHtml += `<strong>${manuallySelected}</strong> ${manuallySelected === 1 ? 'study has' : 'studies have'} been manually selected from the database.`;
+      }
+    }
+
+    noteHtml += '</p>';
+    container.innerHTML = noteHtml;
   },
 
   /**
@@ -302,12 +677,10 @@ FReD.annotator = {
       const outcomeClass = this.getOutcomeClass(outcome);
 
       return [
-        study.ref_original
-          ? `<span title="${FReD.utils.escapeHtml(study.ref_original)}">${study.doi_original ? `<a href="https://doi.org/${study.doi_original}" target="_blank">${FReD.utils.escapeHtml(study.title_original || study.doi_original)}</a>` : FReD.utils.escapeHtml(study.title_original || 'Unknown')}</span>`
-          : (study.doi_original ? `<a href="https://doi.org/${study.doi_original}" target="_blank">${study.doi_original}</a>` : ''),
-        study.ref_replication
-          ? `<span title="${FReD.utils.escapeHtml(study.ref_replication)}">${study.doi_replication ? `<a href="https://doi.org/${study.doi_replication}" target="_blank">${FReD.utils.escapeHtml(study.title_replication || study.doi_replication)}</a>` : FReD.utils.escapeHtml(study.title_replication || 'Unknown')}</span>`
-          : (study.doi_replication ? `<a href="https://doi.org/${study.doi_replication}" target="_blank">${study.doi_replication}</a>` : ''),
+        FReD.utils.formatReferenceCell(study.ref_original, study.doi_original) ||
+          (study.doi_original ? `<a href="https://doi.org/${study.doi_original}" target="_blank">${study.doi_original}</a>` : ''),
+        FReD.utils.formatReferenceCell(study.ref_replication, study.doi_replication) ||
+          (study.doi_replication ? `<a href="https://doi.org/${study.doi_replication}" target="_blank">${study.doi_replication}</a>` : ''),
         `<span class="outcome-badge ${outcomeClass}">${FReD.utils.escapeHtml(outcome)}</span>`
       ];
     });
@@ -346,6 +719,24 @@ FReD.annotator = {
   },
 
   /**
+   * Categorize outcome into one of: success, mixed, failed, other
+   */
+  getOutcomeCategory(outcome) {
+    if (!outcome) return 'other';
+    const lower = outcome.toLowerCase();
+    if (lower.includes('success') || (lower.includes('replicated') && !lower.includes('not'))) {
+      return 'success';
+    }
+    if (lower.includes('mixed') || lower.includes('informative')) {
+      return 'mixed';
+    }
+    if (lower.includes('fail') || lower.includes('not replicated')) {
+      return 'failed';
+    }
+    return 'other';
+  },
+
+  /**
    * Update outcome chart - horizontal stacked bar
    */
   updateOutcomeChart() {
@@ -355,56 +746,66 @@ FReD.annotator = {
       return;
     }
 
-    // Count outcomes
-    const counts = {};
+    // Count outcomes by category
+    const categoryCounts = { success: 0, mixed: 0, failed: 0, other: 0 };
+    const categoryLabels = { success: [], mixed: [], failed: [], other: [] };
+
     this.matchedStudies.forEach(study => {
       const outcome = study.outcome || 'Not coded';
-      counts[outcome] = (counts[outcome] || 0) + 1;
+      const category = this.getOutcomeCategory(outcome);
+      categoryCounts[category]++;
+      if (!categoryLabels[category].includes(outcome)) {
+        categoryLabels[category].push(outcome);
+      }
     });
 
     const total = this.matchedStudies.length;
-    const outcomes = Object.keys(counts);
 
-    // Define colors for outcomes
-    const colors = {
-      'success': '#8FBC8F',
-      'replicated': '#8FBC8F',
-      'failure': '#F08080',
-      'not replicated': '#F08080',
-      'mixed': '#FFD700',
-      'inconclusive': '#C8C8C8',
-      'informative failure signal': '#FFB347',
-      'not coded': '#C8C8C8'
+    // Use theme-aware colors that match badges
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+    // Fixed order: success, mixed, failed, other
+    const categoryOrder = ['success', 'mixed', 'failed', 'other'];
+    const categoryColors = isDark ? {
+      success: '#166534',
+      mixed: '#A16207',
+      failed: '#991B1B',
+      other: '#334155'
+    } : {
+      success: '#8FBC8F',
+      mixed: '#EAB308',
+      failed: '#F08080',
+      other: '#C8C8C8'
+    };
+    const categoryNames = {
+      success: 'successful',
+      mixed: 'mixed',
+      failed: 'failed',
+      other: 'other'
     };
 
-    const getColor = (outcome) => {
-      const lower = outcome.toLowerCase();
-      for (const [key, color] of Object.entries(colors)) {
-        if (lower.includes(key)) return color;
-      }
-      return '#C8C8C8';
-    };
+    // Create stacked bar traces in fixed order
+    const traces = categoryOrder
+      .filter(cat => categoryCounts[cat] > 0)
+      .map(category => {
+        const count = categoryCounts[category];
+        const proportion = count / total;
+        const percentage = (proportion * 100).toFixed(1);
+        const showLabel = proportion >= 0.1;
 
-    // Create stacked bar traces
-    const traces = outcomes.map(outcome => {
-      const count = counts[outcome];
-      const proportion = count / total;
-      const percentage = (proportion * 100).toFixed(1);
-      const showLabel = proportion >= 0.1;
-
-      return {
-        x: [proportion],
-        y: [''],
-        type: 'bar',
-        orientation: 'h',
-        name: `${outcome} (${count})`,
-        text: showLabel ? [`${percentage}%`] : [''],
-        textposition: 'inside',
-        insidetextanchor: 'middle',
-        textfont: { color: '#fff', size: 12 },
-        hoverinfo: showLabel ? 'none' : 'text',
-        hovertext: [`${outcome}: ${percentage}%`],
-        marker: { color: getColor(outcome) }
+        return {
+          x: [proportion],
+          y: [''],
+          type: 'bar',
+          orientation: 'h',
+          name: `${categoryNames[category]} (${count})`,
+          text: showLabel ? [`${percentage}%`] : [''],
+          textposition: 'inside',
+          insidetextanchor: 'middle',
+          textfont: { color: '#fff', size: 12 },
+          hoverinfo: showLabel ? 'none' : 'text',
+          hovertext: [`${categoryNames[category]}: ${percentage}%`],
+          marker: { color: categoryColors[category] }
       };
     });
 
@@ -452,47 +853,192 @@ FReD.annotator = {
   },
 
   /**
+   * Convert DOI URLs in text to clickable links
+   */
+  linkifyDOIs(text) {
+    // Match DOI URLs like https://doi.org/... or http://doi.org/...
+    const doiPattern = /(https?:\/\/doi\.org\/[^\s<>"]+)/gi;
+    return text.replace(doiPattern, '<a href="$1" target="_blank">$1</a>');
+  },
+
+  /**
+   * Format details row HTML for a database entry
+   */
+  formatDatabaseDetailsRow(entry) {
+    let html = '<div class="row-details">';
+
+    // Show full original reference
+    if (entry.ref_original) {
+      // Escape HTML then convert DOI URLs to links
+      let refHtml = this.linkifyDOIs(FReD.utils.escapeHtml(entry.ref_original));
+      html += `<p><strong>Original:</strong> ${refHtml}</p>`;
+    } else if (entry.doi_original) {
+      html += `<p><strong>DOI:</strong> <a href="https://doi.org/${entry.doi_original}" target="_blank">https://doi.org/${entry.doi_original}</a></p>`;
+    }
+
+    // Show replications with full references
+    if (entry.replications && entry.replications.length > 0) {
+      html += '<h4>Replications:</h4><ul>';
+
+      entry.replications.forEach(rep => {
+        const outcome = rep.outcome || 'Not coded';
+        const outcomeClass = this.getOutcomeClass(outcome);
+
+        // Use full reference if available, otherwise title
+        let repDisplay = '';
+        if (rep.ref_replication) {
+          // Escape HTML then convert DOI URLs to links
+          repDisplay = this.linkifyDOIs(FReD.utils.escapeHtml(rep.ref_replication));
+        } else {
+          const repTitle = rep.title_replication || rep.doi_replication || 'Unknown';
+          if (rep.doi_replication) {
+            repDisplay = `<a href="https://doi.org/${rep.doi_replication}" target="_blank">${FReD.utils.escapeHtml(repTitle)}</a>`;
+          } else {
+            repDisplay = FReD.utils.escapeHtml(repTitle);
+          }
+        }
+
+        let reportLink = '';
+        if (rep.url_replication) {
+          reportLink = ` <a href="${FReD.utils.escapeHtml(rep.url_replication)}" target="_blank">[Link to report]</a>`;
+        }
+
+        html += `<li><span class="outcome-badge ${outcomeClass}">${FReD.utils.escapeHtml(outcome)}</span> ${repDisplay}${reportLink}</li>`;
+      });
+
+      html += '</ul>';
+    }
+
+    html += '</div>';
+    return html;
+  },
+
+  /**
+   * Build searchable text for a database entry (for DataTables search)
+   */
+  buildSearchableText(entry) {
+    const parts = [
+      entry.ref_original || '',
+      entry.title_original || '',
+      entry.doi_original || ''
+    ];
+
+    // Add replication info to searchable text
+    if (entry.replications) {
+      entry.replications.forEach(rep => {
+        parts.push(rep.ref_replication || '');
+        parts.push(rep.title_replication || '');
+        parts.push(rep.doi_replication || '');
+        parts.push(rep.outcome || '');
+      });
+    }
+
+    return parts.join(' ');
+  },
+
+  /**
    * Initialize database browser table
    */
   initDatabaseTable() {
     if (!this.floraData?.entries) return;
 
-    const tableData = this.floraData.entries.map(entry => [
-      entry.doi_original || '',
-      FReD.utils.escapeHtml(entry.ref_original || entry.title_original || '')
-    ]);
+    // Store entries for detail row access
+    this.databaseEntries = this.floraData.entries;
+
+    const tableData = this.floraData.entries.map((entry, idx) => {
+      // Use parseReference to get author-year
+      const parsed = FReD.utils.parseReference(entry.ref_original);
+      const authorYear = parsed.short || entry.doi_original || '';
+      const title = entry.title_original || '';
+
+      return {
+        idx: idx,
+        doi: entry.doi_original || '',
+        authorYear: authorYear,
+        title: FReD.utils.escapeHtml(title),
+        // Hidden searchable text that includes all details
+        searchText: this.buildSearchableText(entry)
+      };
+    });
 
     this.databaseTable = $('#database-table').DataTable({
       data: tableData,
       columns: [
-        { title: 'DOI' },
-        { title: 'Reference' }
+        {
+          className: 'details-control',
+          orderable: false,
+          data: null,
+          defaultContent: '',
+          width: '20px'
+        },
+        {
+          title: 'Reference',
+          data: 'authorYear',
+          width: '180px'
+        },
+        {
+          title: 'Title',
+          data: 'title'
+        },
+        {
+          // Hidden column for search
+          data: 'searchText',
+          visible: false
+        }
       ],
       pageLength: 10,
-      scrollX: true,
+      order: [[1, 'asc']],
       select: {
-        style: 'multi'
+        style: 'multi',
+        selector: 'td:not(.details-control)'
+      }
+    });
+
+    // Handle details toggle
+    const self = this;
+    $('#database-table tbody').on('click', 'td.details-control', function(e) {
+      e.stopPropagation();
+      const tr = $(this).closest('tr');
+      const row = self.databaseTable.row(tr);
+      const rowData = row.data();
+
+      if (row.child.isShown()) {
+        row.child.hide();
+        tr.removeClass('shown');
+      } else {
+        const entry = self.databaseEntries[rowData.idx];
+        row.child(self.formatDatabaseDetailsRow(entry)).show();
+        tr.addClass('shown');
       }
     });
 
     // Handle selection
-    this.databaseTable.on('select', (e, dt, type, indexes) => {
+    this.databaseTable.on('select', async (e, dt, type, indexes) => {
       indexes.forEach(idx => {
-        const doi = tableData[idx][0];
-        if (doi) this.selectedDOIs.add(doi.toLowerCase());
+        const rowData = this.databaseTable.row(idx).data();
+        if (rowData.doi) this.selectedDOIs.add(rowData.doi.toLowerCase());
       });
       this.matchStudies();
       this.updateDOIPreview();
+      this.updateProcessButtons();
+
+      // Check for retractions if enabled
+      this.checkRetractions = document.getElementById('check-retractions')?.checked || false;
+      if (this.checkRetractions) {
+        await this.checkForRetractions();
+      }
+
       this.updateResults();
     });
 
     this.databaseTable.on('deselect', (e, dt, type, indexes) => {
       indexes.forEach(idx => {
-        const doi = tableData[idx][0];
-        if (doi) this.selectedDOIs.delete(doi.toLowerCase());
+        const rowData = this.databaseTable.row(idx).data();
+        if (rowData.doi) this.selectedDOIs.delete(rowData.doi.toLowerCase());
       });
       this.matchStudies();
       this.updateDOIPreview();
+      this.updateProcessButtons();
       this.updateResults();
     });
   },
@@ -504,32 +1050,25 @@ FReD.annotator = {
     const reportContainer = document.getElementById('report-container');
     const mdSource = document.getElementById('markdown-source');
 
-    if (this.matchedStudies.length === 0) {
+    if (this.matchedStudies.length === 0 && this.retractedDOIs.size === 0) {
       reportContainer.innerHTML = '<p>No studies selected. Add DOIs in the Input tab or select from the database.</p>';
       mdSource.textContent = '';
       return;
     }
 
-    const html = FReD.reportGenerator.generate(this.matchedStudies, null, { format: 'html' });
-    const markdown = FReD.reportGenerator.generate(this.matchedStudies, null, { format: 'markdown' });
+    const options = {
+      format: 'html',
+      retractedDOIs: this.retractedDOIs,
+      inputDOIs: this.inputDOIs
+    };
+
+    const html = FReD.reportGenerator.generate(this.matchedStudies, null, options);
+    const markdown = FReD.reportGenerator.generate(this.matchedStudies, null, { ...options, format: 'markdown' });
 
     reportContainer.innerHTML = html;
     mdSource.textContent = markdown;
   },
 
-  /**
-   * Render replicability plot - simplified without effect sizes
-   */
-  renderReplicabilityPlot() {
-    const container = document.getElementById('replicability-plot');
-    if (!container || this.matchedStudies.length === 0) {
-      if (container) container.innerHTML = '<p class="text-muted">No studies selected or effect size data not available in FLoRA dataset.</p>';
-      return;
-    }
-
-    // FLoRA data doesn't have effect sizes, so show a message
-    container.innerHTML = '<p class="text-muted">Effect size comparison not available. The FLoRA dataset provides replication outcomes without detailed effect size data.</p>';
-  }
 };
 
 // Initialize when DOM is ready

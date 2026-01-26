@@ -8,20 +8,38 @@
 window.FReD = window.FReD || {};
 
 FReD.reportGenerator = {
-  // Outcome symbols
+  // Outcome symbols - using text characters that respond to CSS color
+  // Note: getSymbol() method provides theme-aware symbols
   symbols: {
-    success: { html: '<span style="color: darkgreen;">&#x2714;</span>', text: '[Re]' },
-    failure: { html: '<span style="color: darkred;">&#x2716;</span>', text: '[¬Re]' },
-    mixed: { html: '&#x2753;', text: '[?Re]' },
-    inconclusive: { html: '&#x2754;', text: '[?]' },
-    not_coded: { html: '&#x270F;', text: '[NC]' }
+    success: { html: '<span style="color: #166534;">&#x2714;</span>', text: '[Re]' },  // ✔
+    failure: { html: '<span style="color: #991B1B;">&#x2716;</span>', text: '[¬Re]' },  // ✖
+    mixed: { html: '<span style="color: #A16207; font-weight: bold;">?</span>', text: '[?Re]' },  // Plain ?
+    inconclusive: { html: '<span style="color: #666;">~</span>', text: '[?]' },
+    not_coded: { html: '<span style="color: #666;">&#x270F;</span>', text: '[NC]' }  // ✏
+  },
+
+  /**
+   * Get symbol with theme-aware styling
+   */
+  getSymbol(key) {
+    const symbol = this.symbols[key] || this.symbols.not_coded;
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+    if (key === 'mixed') {
+      // In light mode, add visible outline for visibility; in dark mode, use brighter yellow
+      const style = isDark
+        ? 'color: #EAB308; font-weight: bold;'  // Brighter yellow for dark mode
+        : 'color: #A16207; font-weight: bold; text-shadow: -0.5px -0.5px 0 #000, 0.5px -0.5px 0 #000, -0.5px 0.5px 0 #000, 0.5px 0.5px 0 #000;';  // Black outline for light mode
+      return { html: `<span style="${style}">?</span>`, text: symbol.text };
+    }
+    return symbol;
   },
 
   /**
    * Generate full report
    */
   generate(matchedStudies, criterion, options = {}) {
-    const { format = 'html' } = options;
+    const { format = 'html', retractedDOIs = new Map(), inputDOIs = new Set() } = options;
 
     // Group by original study
     const grouped = this.groupByOriginal(matchedStudies);
@@ -31,8 +49,8 @@ FReD.reportGenerator = {
 
     // Generate report content
     return format === 'markdown'
-      ? this.generateMarkdown(assessed)
-      : this.generateHTML(assessed);
+      ? this.generateMarkdown(assessed, retractedDOIs, inputDOIs)
+      : this.generateHTML(assessed, retractedDOIs, inputDOIs);
   },
 
   /**
@@ -111,44 +129,99 @@ FReD.reportGenerator = {
   /**
    * Generate HTML report
    */
-  generateHTML(assessed) {
-    const legend = this.generateLegendHTML();
+  generateHTML(assessed, retractedDOIs = new Map(), inputDOIs = new Set()) {
+    // Collect which outcome types are present
+    const presentOutcomes = new Set();
+    assessed.forEach(original => {
+      presentOutcomes.add(original.overallOutcome);
+    });
+
+    const legend = this.generateLegendHTML(presentOutcomes, retractedDOIs.size > 0);
 
     let html = `
       <h1>Replication Report</h1>
       <p><strong>Generated:</strong> ${new Date().toLocaleDateString()}</p>
-      <p><em>Based on data from the FORRT Replication Database (FReD)</em></p>
+      <p><em>Based on data from the FORRT Library of Replication Attempts (FLoRA)</em></p>
 
       ${legend}
-
-      <h2>Replication Outcomes</h2>
     `;
 
+    // Add retraction section if there are retracted articles
+    if (retractedDOIs.size > 0) {
+      html += `
+        <h2>Retracted Articles</h2>
+        <p style="color: #991B1B;"><strong>Warning:</strong> The following ${retractedDOIs.size} article(s) from your reference list have been retracted:</p>
+        <ul>
+      `;
+
+      retractedDOIs.forEach((info, doi) => {
+        let retractionDetails = '';
+        if (info.retractionDate) {
+          retractionDetails += ` (retracted ${info.retractionDate}`;
+          if (info.reason) {
+            retractionDetails += `: ${info.reason}`;
+          }
+          retractionDetails += ')';
+        } else if (info.reason) {
+          retractionDetails += ` (${info.reason})`;
+        }
+
+        html += `<li class="retracted-item">
+          <span class="retraction-badge">RETRACTED</span>
+          <a href="https://doi.org/${doi}" target="_blank">${doi}</a>
+          ${info.title ? `- ${FReD.utils.escapeHtml(info.title)}` : ''}
+          ${retractionDetails ? `<br><small style="color: #666;">${FReD.utils.escapeHtml(retractionDetails)}</small>` : ''}
+        </li>`;
+      });
+
+      html += '</ul>';
+    }
+
+    html += '<h2>Replication Outcomes</h2>';
+
     if (assessed.length === 0) {
-      html += '<p>No studies found in FReD database.</p>';
+      html += '<p>No studies found in FLoRA database.</p>';
     } else {
       assessed.forEach(original => {
-        const symbol = this.symbols[original.overallOutcome] || this.symbols.not_coded;
+        const symbol = this.getSymbol(original.overallOutcome);
         const displayRef = original.ref_original || original.title_original || original.doi_original || 'Unknown';
 
+        // Check if this study is also retracted
+        const isRetracted = original.doi_original && retractedDOIs.has(original.doi_original.toLowerCase());
+        const retractedBadge = isRetracted ? '<span class="retraction-badge" style="margin-right: 0.5em;">RETRACTED</span>' : '';
+
+        // Build original study display with DOI link inline
+        let originalDisplay = FReD.utils.escapeHtml(displayRef);
+        if (original.doi_original) {
+          originalDisplay += ` <a href="https://doi.org/${original.doi_original}" target="_blank">https://doi.org/${original.doi_original}</a>`;
+        }
+
+        // Use flexbox for hanging indent: symbol in fixed-width column, text wraps within its column
         html += `
-          <h5>${symbol.html} ${FReD.utils.escapeHtml(displayRef)}</h5>
-          ${original.doi_original ? `<p style="font-size: 0.875rem;"><a href="https://doi.org/${original.doi_original}" target="_blank">https://doi.org/${original.doi_original}</a></p>` : ''}
-          <ul>
+          <div style="display: flex; margin-bottom: 0.25rem;">
+            <span style="flex-shrink: 0; width: 1.5em; font-weight: bold;">${symbol.html}</span>
+            <span style="flex: 1;">${retractedBadge}<strong>${originalDisplay}</strong></span>
+          </div>
         `;
+
+        html += '<ul style="margin-top: 0.25rem; margin-bottom: 1rem; margin-left: 1.5em;">';
 
         original.replications.forEach(rep => {
           const displayRepRef = rep.ref_replication || rep.title_replication || rep.doi_replication || 'Unknown';
           const outcomeText = rep.outcome || 'Not coded';
 
-          html += `
-            <li>
-              <strong>${FReD.utils.escapeHtml(outcomeText)}:</strong>
-              ${FReD.utils.escapeHtml(displayRepRef)}
-              ${rep.doi_replication ? `<a href="https://doi.org/${rep.doi_replication}" target="_blank">[DOI]</a>` : ''}
-              ${rep.url_replication ? `<a href="${rep.url_replication}" target="_blank">[Link]</a>` : ''}
-            </li>
-          `;
+          // Build replication reference with DOI link inline
+          let repDisplay = FReD.utils.escapeHtml(displayRepRef);
+          if (rep.doi_replication) {
+            repDisplay += ` <a href="https://doi.org/${rep.doi_replication}" target="_blank">https://doi.org/${rep.doi_replication}</a>`;
+          }
+
+          // Add "Link to report" if url_replication is present
+          if (rep.url_replication) {
+            repDisplay += ` <a href="${FReD.utils.escapeHtml(rep.url_replication)}" target="_blank">[Link to report]</a>`;
+          }
+
+          html += `<li style="margin-bottom: 0.5rem;"><strong>${FReD.utils.escapeHtml(outcomeText)}:</strong> ${repDisplay}</li>`;
         });
 
         html += '</ul>';
@@ -159,45 +232,58 @@ FReD.reportGenerator = {
   },
 
   /**
-   * Generate legend HTML
+   * Generate legend HTML - only shows outcomes that are present in the data
    */
-  generateLegendHTML() {
-    return `
-      <h3>Legend</h3>
-      <table>
+  generateLegendHTML(presentOutcomes = new Set(), hasRetractions = false) {
+    const legendItems = [
+      { key: 'success', label: 'Success', desc: 'All replications of the original study were successful.' },
+      { key: 'failure', label: 'Failure', desc: 'All replications of the original study failed.' },
+      { key: 'mixed', label: 'Mixed Results', desc: 'The replications had mixed outcomes.' },
+      { key: 'inconclusive', label: 'Inconclusive', desc: 'Results were inconclusive.' },
+      { key: 'not_coded', label: 'Not Coded', desc: 'The outcome has not yet been coded.' }
+    ];
+
+    // Filter to only show legend items that are present, but always show success, failure, mixed
+    const alwaysShow = ['success', 'failure', 'mixed'];
+    const itemsToShow = legendItems.filter(item =>
+      alwaysShow.includes(item.key) || presentOutcomes.has(item.key)
+    );
+
+    let html = '<h3>Legend</h3><table>';
+    itemsToShow.forEach(item => {
+      const symbol = this.getSymbol(item.key);
+      html += `
         <tr>
-          <td style="text-align: center; width: 60px;">${this.symbols.success.html}</td>
-          <td><em>Success:</em> All replications of the original study were successful.</td>
+          <td style="text-align: center; width: 60px;">${symbol.html}</td>
+          <td><em>${item.label}:</em> ${item.desc}</td>
         </tr>
+      `;
+    });
+
+    // Add retraction indicator to legend if there are retractions
+    if (hasRetractions) {
+      html += `
         <tr>
-          <td style="text-align: center;">${this.symbols.failure.html}</td>
-          <td><em>Failure:</em> All replications of the original study failed.</td>
+          <td style="text-align: center; width: 60px;"><span class="retraction-badge">RETRACTED</span></td>
+          <td><em>Retracted:</em> This article has been retracted according to the Retraction Watch database.</td>
         </tr>
-        <tr>
-          <td style="text-align: center;">${this.symbols.mixed.html}</td>
-          <td><em>Mixed Results:</em> The replications had mixed outcomes.</td>
-        </tr>
-        <tr>
-          <td style="text-align: center;">${this.symbols.inconclusive.html}</td>
-          <td><em>Inconclusive:</em> Results were inconclusive.</td>
-        </tr>
-        <tr>
-          <td style="text-align: center;">${this.symbols.not_coded.html}</td>
-          <td><em>Not Coded:</em> The outcome has not yet been coded.</td>
-        </tr>
-      </table>
-    `;
+      `;
+    }
+
+    html += '</table>';
+
+    return html;
   },
 
   /**
    * Generate Markdown report
    */
-  generateMarkdown(assessed) {
+  generateMarkdown(assessed, retractedDOIs = new Map(), inputDOIs = new Set()) {
     let md = `# Replication Report
 
 **Generated:** ${new Date().toLocaleDateString()}
 
-*Based on data from the FORRT Replication Database (FReD)*
+*Based on data from the FORRT Library of Replication Attempts (FLoRA)*
 
 ### Legend
 
@@ -208,19 +294,43 @@ FReD.reportGenerator = {
 | ${this.symbols.mixed.text} | *Mixed Results:* Mixed outcomes. |
 | ${this.symbols.inconclusive.text} | *Inconclusive:* Results inconclusive. |
 | ${this.symbols.not_coded.text} | *Not Coded:* Not yet coded. |
-
-## Replication Outcomes
-
+${retractedDOIs.size > 0 ? '| [RETRACTED] | *Retracted:* Article has been retracted. |\n' : ''}
 `;
 
+    // Add retraction section if there are retracted articles
+    if (retractedDOIs.size > 0) {
+      md += `## Retracted Articles
+
+**Warning:** The following ${retractedDOIs.size} article(s) from your reference list have been retracted:
+
+`;
+      retractedDOIs.forEach((info, doi) => {
+        let retractionDetails = '';
+        if (info.retractionDate) {
+          retractionDetails = ` (retracted ${info.retractionDate}${info.reason ? ': ' + info.reason : ''})`;
+        } else if (info.reason) {
+          retractionDetails = ` (${info.reason})`;
+        }
+
+        md += `- **[RETRACTED]** [${doi}](https://doi.org/${doi})${info.title ? ' - ' + info.title : ''}${retractionDetails}\n`;
+      });
+      md += '\n';
+    }
+
+    md += '## Replication Outcomes\n\n';
+
     if (assessed.length === 0) {
-      md += 'No studies found in FReD database.\n';
+      md += 'No studies found in FLoRA database.\n';
     } else {
       assessed.forEach(original => {
         const symbol = this.symbols[original.overallOutcome] || this.symbols.not_coded;
         const displayRef = original.ref_original || original.title_original || original.doi_original || 'Unknown';
 
-        md += `##### ${symbol.text} ${displayRef}`;
+        // Check if this study is also retracted
+        const isRetracted = original.doi_original && retractedDOIs.has(original.doi_original.toLowerCase());
+        const retractedPrefix = isRetracted ? '[RETRACTED] ' : '';
+
+        md += `##### ${symbol.text} ${retractedPrefix}${displayRef}`;
         if (original.doi_original) {
           md += ` [DOI](https://doi.org/${original.doi_original})`;
         }

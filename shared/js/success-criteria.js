@@ -16,7 +16,8 @@ FReD.successCriteria = {
       label: 'Significance of Replication',
       shortLabel: 'Significance (Rep)',
       hasOSNotSignificant: true,
-      note: 'Replication success was assessed based on the statistical significance of the replication effect (and whether its direction is consistent with the original effect). Replications that were significant and in the same direction as the original were considered as successes, while replications that were not significant or in the opposite direction were considered as failures.'
+      note: 'Replication success was assessed based on the statistical significance of the replication effect (using reported p-values) and whether its direction is consistent with the original effect. Replications that were significant and in the same direction as the original were considered as successes, while replications that were not significant or in the opposite direction were considered as failures.',
+      hasDynamicReversalNote: true
     },
     significance_agg: {
       id: 'significance_agg',
@@ -82,7 +83,7 @@ FReD.successCriteria = {
     'Not calculable': '#C8C8C8',
     'not calculable': '#C8C8C8',
 
-    // Reported success outcomes (from FReD database)
+    // Reported success outcomes (from FReD/FLoRA)
     'successful': '#8FBC8F',
     'Successful': '#8FBC8F',
     'failed': '#FF7F7F',
@@ -95,8 +96,8 @@ FReD.successCriteria = {
     'Uninformative': '#D3D3D3',
     'descriptive only': '#B0C4DE',
     'Descriptive only': '#B0C4DE',
-    'statistically successful but flawed': '#9ACD32',
-    'Statistically successful but flawed': '#9ACD32',
+    'statistically successful but flawed': '#d88201',
+    'Statistically successful but flawed': '#d88201',
 
     // Homogeneity & significance specific
     'success (homogeneous and jointly significantly above 0)': '#8FBC8F',
@@ -270,6 +271,44 @@ FReD.successCriteria = {
    */
   getCriterion(id) {
     return this.criteria[id] || null;
+  },
+
+  /**
+   * Check if a study's direction is assessable
+   * (has directional effect type and both effect sizes)
+   */
+  isDirectionAssessable(study) {
+    return study && study.direction_assessable === true;
+  },
+
+  /**
+   * Count successes where direction cannot be assessed
+   * (these could potentially be reversals that we can't detect)
+   * @param {Array} studies - Array of study objects
+   * @param {string} criterionId - The criterion to check (only relevant for significance_r)
+   * @returns {Object} { successCount, nonAssessableCount }
+   */
+  countNonAssessableSuccesses(studies, criterionId) {
+    if (criterionId !== 'significance_r') {
+      return { successCount: 0, nonAssessableCount: 0 };
+    }
+
+    let successCount = 0;
+    let nonAssessableCount = 0;
+
+    studies.forEach(study => {
+      const { outcome } = this.getOutcome(study, criterionId);
+      // Check for success (case-insensitive)
+      if (outcome && outcome.toLowerCase() === 'success') {
+        successCount++;
+        // If direction is not assessable, we can't distinguish from reversal
+        if (!this.isDirectionAssessable(study)) {
+          nonAssessableCount++;
+        }
+      }
+    });
+
+    return { successCount, nonAssessableCount };
   }
 };
 
