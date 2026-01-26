@@ -82,10 +82,33 @@
   padding: 0.5rem 1rem;
   cursor: pointer;
   transition: background 0.15s;
+  user-select: none;
 }
 
 .column-selector-item:hover {
   background: var(--fred-bg-alt);
+}
+
+.column-selector-item.dragging {
+  opacity: 0.5;
+  background: var(--fred-bg-alt);
+}
+
+.column-selector-item.drag-over {
+  border-top: 2px solid var(--fred-primary);
+  margin-top: -2px;
+}
+
+.column-drag-handle {
+  cursor: grab;
+  color: var(--fred-text-muted);
+  margin-right: 0.5rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.column-drag-handle:active {
+  cursor: grabbing;
 }
 
 .column-selector-item input[type="checkbox"] {

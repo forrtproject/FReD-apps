@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FLoRA Annotator - Annotate Reading Lists</title>
+  <link rel="icon" type="image/png" href="../shared/images/favicon.png">
 
   <!-- Stylesheets -->
   <link rel="stylesheet" href="../shared/css/theme.css">
@@ -22,7 +23,7 @@
     <div class="container">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div style="display: flex; align-items: center; gap: 1rem;">
-          <img src="https://forrt.org/author/forrt/avatar_hu8bc9dda6369ea35e3d2850cf7115c3e5_11296_270x270_fill_q100_h2_lanczos_center_2.webp" alt="FORRT Logo" style="height: 50px; border-radius: 8px;">
+          <img src="../shared/images/fred-logo-inverted.png" alt="FReD Logo" style="height: 50px; border-radius: 8px;">
           <div>
             <h1 style="margin: 0;">FLoRA Annotator</h1>
             <p style="margin: 0; opacity: 0.9; font-size: 0.9rem;">Annotate Reading Lists with Replication Information</p>
@@ -107,7 +108,7 @@ Smith, J. (2020). Study title. Journal Name. https://doi.org/10.1234/example
                 <div>
                   <span style="font-size: 0.875rem; font-weight: 500; color: var(--fred-text);">Check for retracted articles</span>
                   <small class="text-muted" style="display: block; margin-top: 0.25rem;">
-                    Query the Retraction Watch database to identify retracted papers. This will slow down processing as it requires downloading the database (~15MB).
+                    Query the Retraction Watch database to identify retracted papers. This requires downloading the database (~13MB) on first use.
                   </small>
                 </div>
               </label>
@@ -125,6 +126,22 @@ Smith, J. (2020). Study title. Journal Name. https://doi.org/10.1234/example
               <span class="file-chosen" id="file-chosen">No file chosen</span>
             </div>
             <small class="text-muted" style="display: block; margin-top: 0.5rem;">Supported formats: PDF, BibTeX (.bib), RIS (.ris), plain text (.txt)</small>
+          </div>
+
+          <!-- PDF URL Input -->
+          <div class="form-group">
+            <label class="form-label" for="pdf-url-input">Or enter a PDF URL</label>
+            <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
+              <input type="url"
+                     id="pdf-url-input"
+                     class="form-control"
+                     placeholder="https://osf.io/preprints/psyarxiv/... or direct PDF link"
+                     style="flex: 1;">
+              <button class="btn btn-secondary" id="btn-fetch-pdf">Fetch PDF</button>
+            </div>
+            <small class="text-muted" style="display: block; margin-top: 0.5rem;">
+              Supports direct PDF links and OSF preprints. Some servers block automated requests - if so, download and upload the PDF instead.
+            </small>
           </div>
 
           <!-- Action Buttons -->
@@ -220,6 +237,9 @@ Smith, J. (2020). Study title. Journal Name. https://doi.org/10.1234/example
   <footer style="background: var(--fred-bg-alt); padding: 1rem 0; margin-top: 2rem; text-align: center; color: var(--fred-text-muted);">
     <div class="container">
       <p>FLoRA Annotator | <a href="https://forrt.org" target="_blank">FORRT</a> | Data last updated: <span id="data-updated">Loading...</span></p>
+      <p style="font-size: 0.85rem; margin-top: 0.5rem;">
+        <a href="mailto:lukas.roeseler@uni-muenster.de?subject=FLoRA%20Annotator%20Feedback%20%2F%20Issue%20Report&body=Please%20describe%20your%20feedback%20or%20issue%20below%3A%0A%0A---%0A%0AIf%20reporting%20a%20data%20issue%2C%20please%20include%3A%0A-%20The%20DOI(s)%20or%20references%20affected%0A-%20What%20appears%20to%20be%20incorrect%0A-%20The%20correct%20information%20(if%20known)%0A-%20Source%2Freference%20for%20the%20correction">Share feedback / Report an issue</a>
+      </p>
     </div>
   </footer>
 
@@ -253,6 +273,7 @@ Smith, J. (2020). Study title. Journal Name. https://doi.org/10.1234/example
   </div>
 
   <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
   <script src="https://cdn.datatables.net/select/1.7.0/js/dataTables.select.min.js"></script>

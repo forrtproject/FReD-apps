@@ -137,6 +137,19 @@ FReD.annotator = {
       }
     });
 
+    // PDF URL fetch
+    document.getElementById('btn-fetch-pdf')?.addEventListener('click', () => {
+      this.fetchPdfFromUrl();
+    });
+
+    // Allow Enter key to trigger PDF fetch
+    document.getElementById('pdf-url-input')?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.fetchPdfFromUrl();
+      }
+    });
+
     // Toggle DOIs display
     document.getElementById('btn-toggle-dois')?.addEventListener('click', () => {
       const body = document.getElementById('doi-preview-body');
@@ -473,6 +486,68 @@ FReD.annotator = {
   },
 
   /**
+   * Fetch and process PDF from URL
+   */
+  async fetchPdfFromUrl() {
+    const urlInput = document.getElementById('pdf-url-input');
+    const fetchBtn = document.getElementById('btn-fetch-pdf');
+    const url = urlInput?.value?.trim();
+
+    if (!url) {
+      FReD.utils.showNotification('Please enter a PDF URL.', 'warning');
+      urlInput?.focus();
+      return;
+    }
+
+    // Basic URL validation
+    try {
+      new URL(url);
+    } catch {
+      FReD.utils.showNotification('Please enter a valid URL.', 'warning');
+      urlInput?.focus();
+      return;
+    }
+
+    // Update retraction check setting from checkbox
+    this.checkRetractions = document.getElementById('check-retractions')?.checked || false;
+
+    // Disable button and show loading state
+    const originalText = fetchBtn.textContent;
+    fetchBtn.disabled = true;
+    fetchBtn.textContent = 'Fetching...';
+
+    try {
+      FReD.utils.showNotification('Fetching PDF from URL...', 'info');
+      const dois = await FReD.doiParser.extractFromPDFUrl(url);
+
+      if (dois.length === 0) {
+        FReD.utils.showNotification('No DOIs found in the PDF. The document may not contain DOI references.', 'warning');
+      } else {
+        await this.addDOIs(dois);
+        FReD.utils.showNotification(`Found ${dois.length} DOI(s) from PDF.`, 'success');
+        this.switchTab('selection');
+        // Clear the URL input on success
+        urlInput.value = '';
+      }
+    } catch (error) {
+      console.error('PDF URL fetch error:', error);
+      let errorMsg = error.message || 'Failed to fetch or parse PDF.';
+      // Make the error more user-friendly
+      if (errorMsg.includes('Try downloading')) {
+        // Already a user-friendly message from fetchWithCorsProxy
+      } else if (errorMsg.includes('HTTP') || errorMsg.includes('403') || errorMsg.includes('blocked')) {
+        errorMsg = 'The server blocked the request. Try downloading the PDF and uploading it instead.';
+      } else if (errorMsg.includes('CORS') || errorMsg.includes('network') || errorMsg.includes('Failed to fetch')) {
+        errorMsg = 'Could not fetch the PDF due to network restrictions. Try downloading the PDF and uploading it instead.';
+      }
+      FReD.utils.showNotification(errorMsg, 'error');
+    } finally {
+      fetchBtn.disabled = false;
+      fetchBtn.textContent = originalText;
+    }
+  },
+
+  /**
    * Add DOIs to selection (from text input or file)
    */
   async addDOIs(dois) {
@@ -559,6 +634,7 @@ FReD.annotator = {
   clearInput() {
     document.getElementById('reference-input').value = '';
     document.getElementById('file-upload').value = '';
+    document.getElementById('pdf-url-input').value = '';
     const fileChosen = document.getElementById('file-chosen');
     if (fileChosen) {
       fileChosen.textContent = 'No file chosen';

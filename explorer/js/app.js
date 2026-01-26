@@ -403,7 +403,8 @@ FReD.explorer = {
     selectableColumns.forEach(col => {
       const checked = this.visibleColumns.includes(col.key) ? 'checked' : '';
       html += `
-        <div class="column-selector-item">
+        <div class="column-selector-item" draggable="true" data-column-key="${col.key}">
+          <span class="column-drag-handle" title="Drag to reorder">&#8801;</span>
           <input type="checkbox" id="col-${col.key}" data-column="${col.key}" ${checked}>
           <label for="col-${col.key}">${col.label}</label>
         </div>
@@ -446,9 +447,86 @@ FReD.explorer = {
     // Reset to defaults
     resetBtn?.addEventListener('click', () => {
       this.visibleColumns = FReD.columnConfig.resetToDefaults();
-      this.updateColumnCheckboxes();
+      this.setupColumnSelector(); // Rebuild to restore default order
       this.rebuildTable();
     });
+
+    // Setup drag and drop for reordering
+    this.setupColumnDragAndDrop(dropdown);
+  },
+
+  /**
+   * Setup drag and drop handlers for column reordering
+   */
+  setupColumnDragAndDrop(dropdown) {
+    const list = dropdown.querySelector('.column-selector-list');
+    let draggedItem = null;
+
+    list.addEventListener('dragstart', (e) => {
+      const item = e.target.closest('.column-selector-item');
+      if (!item) return;
+      draggedItem = item;
+      item.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    list.addEventListener('dragend', (e) => {
+      const item = e.target.closest('.column-selector-item');
+      if (item) item.classList.remove('dragging');
+      list.querySelectorAll('.column-selector-item').forEach(el => {
+        el.classList.remove('drag-over');
+      });
+      draggedItem = null;
+    });
+
+    list.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      const item = e.target.closest('.column-selector-item');
+      if (!item || item === draggedItem) return;
+
+      // Add visual feedback
+      list.querySelectorAll('.column-selector-item').forEach(el => {
+        el.classList.remove('drag-over');
+      });
+      item.classList.add('drag-over');
+    });
+
+    list.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const targetItem = e.target.closest('.column-selector-item');
+      if (!targetItem || !draggedItem || targetItem === draggedItem) return;
+
+      // Reorder in DOM
+      const items = [...list.querySelectorAll('.column-selector-item')];
+      const draggedIndex = items.indexOf(draggedItem);
+      const targetIndex = items.indexOf(targetItem);
+
+      if (draggedIndex < targetIndex) {
+        targetItem.after(draggedItem);
+      } else {
+        targetItem.before(draggedItem);
+      }
+
+      // Save new order
+      this.saveColumnOrder();
+    });
+  },
+
+  /**
+   * Save current column order from DOM
+   */
+  saveColumnOrder() {
+    const list = document.querySelector('.column-selector-list');
+    const items = list.querySelectorAll('.column-selector-item');
+    const order = [...items].map(item => item.dataset.columnKey);
+
+    FReD.columnConfig.saveColumnOrder(order);
+
+    // Update visibleColumns to reflect new order
+    this.visibleColumns = FReD.columnConfig.getVisibleColumns();
+    this.rebuildTable();
   },
 
   /**

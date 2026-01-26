@@ -94,6 +94,198 @@ FReD.doiParser = {
   },
 
   /**
+   * Extract DOIs from a PDF URL
+   * Supports direct PDF links and OSF preprint URLs
+   */
+  async extractFromPDFUrl(url) {
+    // Lazy load PDF.js if not already loaded
+    if (!window.pdfjsLib) {
+      await this.loadPDFJS();
+    }
+
+    let pdfUrl;
+
+    // Handle OSF preprints specially via their API
+    if (this.isOsfPreprintUrl(url)) {
+      pdfUrl = await this.getOsfPreprintPdfUrl(url);
+    } else {
+      // Transform other URLs (arXiv, direct links, etc.)
+      pdfUrl = this.transformToPdfUrl(url);
+    }
+
+    console.log('Fetching PDF from:', pdfUrl);
+
+    try {
+      // Use CORS proxy fallback for cross-origin requests
+      const response = await this.fetchWithCorsProxy(pdfUrl, {
+        headers: { 'Accept': 'application/pdf' }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+      let allText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ');
+        allText += pageText + '\n';
+      }
+
+      return this.extractFromText(allText);
+    } catch (error) {
+      console.error('PDF URL fetch/parse error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Check if URL is an OSF preprint URL
+   */
+  isOsfPreprintUrl(url) {
+    return /osf\.io\/preprints\/([^\/]+)\/([^\/\s]+)/i.test(url);
+  },
+
+  /**
+   * CORS proxies to try in order
+   */
+  corsProxies: [
+    (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  ],
+
+  /**
+   * Fetch with CORS proxy fallback
+   * Tries direct fetch first, then multiple CORS proxies
+   * @param {string} url - URL to fetch
+   * @param {object} options - Fetch options
+   * @returns {Promise<Response>}
+   */
+  async fetchWithCorsProxy(url, options = {}) {
+    // Try direct fetch first
+    try {
+      const response = await fetch(url, options);
+      if (response.ok) {
+        return response;
+      }
+      // If we got a response but it's not ok (e.g., 403), continue to try proxies
+      console.log(`Direct fetch returned ${response.status}, trying proxies...`);
+    } catch (corsError) {
+      console.log('Direct fetch failed (CORS), trying proxies for:', url);
+    }
+
+    // Try each CORS proxy in order
+    for (let i = 0; i < this.corsProxies.length; i++) {
+      const proxyUrl = this.corsProxies[i](url);
+      try {
+        console.log(`Trying CORS proxy ${i + 1}:`, proxyUrl);
+        const response = await fetch(proxyUrl, options);
+        if (response.ok) {
+          return response;
+        }
+        // If proxy works but server returns 403/401, don't try more proxies - server is blocking
+        if (response.status === 403 || response.status === 401) {
+          console.log(`Server returned ${response.status} - blocking automated requests`);
+          throw new Error('The server is blocking automated requests. Please download the PDF manually and upload it instead.');
+        }
+        console.log(`Proxy ${i + 1} returned ${response.status}`);
+      } catch (error) {
+        // Re-throw if it's our custom error message
+        if (error.message.includes('download the PDF manually')) {
+          throw error;
+        }
+        console.log(`Proxy ${i + 1} failed:`, error.message);
+      }
+    }
+
+    // All proxies failed
+    throw new Error('Could not fetch the PDF. Please download it manually and upload it instead.');
+  },
+
+  /**
+   * Get the PDF download URL for an OSF preprint via their API
+   * @param {string} url - OSF preprint URL
+   * @returns {Promise<string>} Direct PDF download URL
+   */
+  async getOsfPreprintPdfUrl(url) {
+    // Extract preprint ID from URL
+    const match = url.match(/osf\.io\/preprints\/([^\/]+)\/([^\/\s]+)/i);
+    if (!match) {
+      throw new Error('Invalid OSF preprint URL');
+    }
+
+    const preprintId = match[2];
+    console.log('Fetching OSF preprint metadata for:', preprintId);
+
+    // Step 1: Get preprint metadata to find primary file
+    const preprintApiUrl = `https://api.osf.io/v2/preprints/${preprintId}/`;
+    const preprintResponse = await this.fetchWithCorsProxy(preprintApiUrl, {
+      headers: { 'Accept': 'application/json' }
+    });
+
+    if (!preprintResponse.ok) {
+      throw new Error(`Failed to fetch preprint metadata: HTTP ${preprintResponse.status}`);
+    }
+
+    const preprintData = await preprintResponse.json();
+    const primaryFileUrl = preprintData.data?.relationships?.primary_file?.links?.related?.href;
+
+    if (!primaryFileUrl) {
+      throw new Error('Could not find primary file for this preprint');
+    }
+
+    // Step 2: Get file metadata to find download URL
+    const fileResponse = await this.fetchWithCorsProxy(primaryFileUrl, {
+      headers: { 'Accept': 'application/json' }
+    });
+
+    if (!fileResponse.ok) {
+      throw new Error(`Failed to fetch file metadata: HTTP ${fileResponse.status}`);
+    }
+
+    const fileData = await fileResponse.json();
+    const downloadUrl = fileData.data?.links?.download;
+
+    if (!downloadUrl) {
+      throw new Error('Could not find download URL for this file');
+    }
+
+    console.log('Found OSF PDF download URL:', downloadUrl);
+    return downloadUrl;
+  },
+
+  /**
+   * Transform various preprint URLs to direct PDF download URLs
+   * Supports: arXiv, direct PDF links
+   * Note: OSF preprints are handled separately via getOsfPreprintPdfUrl()
+   */
+  transformToPdfUrl(url) {
+    // Direct OSF file/project pattern: https://osf.io/{guid}
+    const osfDirectMatch = url.match(/osf\.io\/([a-z0-9]+)\/?$/i);
+    if (osfDirectMatch && !url.includes('/preprints/')) {
+      return `https://osf.io/download/${osfDirectMatch[1]}/`;
+    }
+
+    // arXiv pattern: https://arxiv.org/abs/{id} -> https://arxiv.org/pdf/{id}.pdf
+    const arxivMatch = url.match(/arxiv\.org\/abs\/([^\s\/]+)/i);
+    if (arxivMatch) {
+      return `https://arxiv.org/pdf/${arxivMatch[1]}.pdf`;
+    }
+
+    // If URL already ends in .pdf or looks like a direct PDF link, return as-is
+    if (url.toLowerCase().endsWith('.pdf') || url.includes('/download')) {
+      return url;
+    }
+
+    // Return original URL as fallback
+    return url;
+  },
+
+  /**
    * Read file as ArrayBuffer
    */
   readFileAsArrayBuffer(file) {

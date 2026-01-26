@@ -809,6 +809,12 @@ table.dataTable tbody tr:hover {
   color: #721c24;
 }
 
+.alert-success {
+  background-color: #d4edda;
+  border-color: #c3e6cb;
+  color: #155724;
+}
+
 /* Modal */
 .modal-overlay {
   position: fixed;
@@ -931,6 +937,12 @@ table.dataTable tbody tr:hover {
   background-color: rgba(220, 53, 69, 0.15);
   border-color: rgba(220, 53, 69, 0.3);
   color: #F1A0A8;
+}
+
+[data-theme="dark"] .alert-success {
+  background-color: rgba(40, 167, 69, 0.15);
+  border-color: rgba(40, 167, 69, 0.3);
+  color: #7FD995;
 }
 
 /* Responsive */

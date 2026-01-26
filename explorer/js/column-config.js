@@ -16,8 +16,9 @@
 window.FReD = window.FReD || {};
 
 FReD.columnConfig = {
-  // Storage key for persisting user preferences
+  // Storage keys for persisting user preferences
   STORAGE_KEY: 'fred-explorer-columns',
+  ORDER_STORAGE_KEY: 'fred-explorer-column-order',
 
   /**
    * Column definitions - edit this to add/modify columns
@@ -157,29 +158,79 @@ FReD.columnConfig = {
 
   /**
    * Get all selectable columns (excludes always-visible and hidden columns)
+   * Returns them in the user's preferred order
    */
   getSelectableColumns() {
-    return Object.entries(this.COLUMN_DEFINITIONS)
+    const allSelectable = Object.entries(this.COLUMN_DEFINITIONS)
       .filter(([key, col]) => !col.alwaysVisible && !col.hidden)
       .map(([key, col]) => ({ key, ...col }));
+
+    // Get stored order
+    const storedOrder = this.getColumnOrder();
+
+    // Sort by stored order, unknown columns go to end
+    return allSelectable.sort((a, b) => {
+      const indexA = storedOrder.indexOf(a.key);
+      const indexB = storedOrder.indexOf(b.key);
+      // If not in stored order, put at end (maintain definition order for new columns)
+      const orderA = indexA === -1 ? 999 : indexA;
+      const orderB = indexB === -1 ? 999 : indexB;
+      return orderA - orderB;
+    });
   },
 
   /**
-   * Get visible columns from localStorage or defaults
+   * Get column order from localStorage or defaults
    */
-  getVisibleColumns() {
-    const stored = localStorage.getItem(this.STORAGE_KEY);
+  getColumnOrder() {
+    const stored = localStorage.getItem(this.ORDER_STORAGE_KEY);
     if (stored) {
       try {
         return JSON.parse(stored);
       } catch (e) {
+        console.warn('Failed to parse stored column order:', e);
+      }
+    }
+    // Return default order from COLUMN_DEFINITIONS
+    return Object.entries(this.COLUMN_DEFINITIONS)
+      .filter(([key, col]) => !col.alwaysVisible && !col.hidden)
+      .map(([key]) => key);
+  },
+
+  /**
+   * Save column order to localStorage
+   */
+  saveColumnOrder(order) {
+    localStorage.setItem(this.ORDER_STORAGE_KEY, JSON.stringify(order));
+  },
+
+  /**
+   * Get visible columns from localStorage or defaults
+   * Returns them in the user's preferred order
+   */
+  getVisibleColumns() {
+    let visibleSet;
+    const stored = localStorage.getItem(this.STORAGE_KEY);
+    if (stored) {
+      try {
+        visibleSet = new Set(JSON.parse(stored));
+      } catch (e) {
         console.warn('Failed to parse stored columns:', e);
       }
     }
-    // Return default visible columns
-    return Object.entries(this.COLUMN_DEFINITIONS)
-      .filter(([key, col]) => col.defaultVisible)
-      .map(([key]) => key);
+
+    if (!visibleSet) {
+      // Use default visible columns
+      visibleSet = new Set(
+        Object.entries(this.COLUMN_DEFINITIONS)
+          .filter(([key, col]) => col.defaultVisible)
+          .map(([key]) => key)
+      );
+    }
+
+    // Return visible columns in the stored order
+    const columnOrder = this.getColumnOrder();
+    return columnOrder.filter(key => visibleSet.has(key));
   },
 
   /**
@@ -190,10 +241,11 @@ FReD.columnConfig = {
   },
 
   /**
-   * Reset to default columns
+   * Reset to default columns and order
    */
   resetToDefaults() {
     localStorage.removeItem(this.STORAGE_KEY);
+    localStorage.removeItem(this.ORDER_STORAGE_KEY);
     return this.getVisibleColumns();
   },
 

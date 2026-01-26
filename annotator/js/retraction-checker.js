@@ -7,8 +7,8 @@
 window.FReD = window.FReD || {};
 
 FReD.retractionChecker = {
-  // Retraction Watch data URL
-  dataUrl: 'https://gitlab.com/crossref/retraction-watch-data/-/raw/main/retraction_watch.csv?ref_type=heads',
+  // Retraction Watch data URL (local gzipped copy updated weekly via GitHub Actions)
+  dataUrl: '../data/retraction-watch.csv.gz',
 
   // Cached retraction data (DOI -> retraction info)
   retractionMap: null,
@@ -43,7 +43,11 @@ FReD.retractionChecker = {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const csvText = await response.text();
+      // Decompress gzipped data
+      const compressedData = await response.arrayBuffer();
+      const decompressed = pako.ungzip(new Uint8Array(compressedData));
+      const csvText = new TextDecoder().decode(decompressed);
+
       this.retractionMap = this.parseCSV(csvText);
       this.isLoaded = true;
 

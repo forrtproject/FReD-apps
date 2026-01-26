@@ -48,6 +48,13 @@ jobs:
           Rscript process-explorer-data.R ../data
           Rscript process-flora-data.R ../data
 
+      - name: Download Retraction Watch data
+        run: |
+          curl -L -o data/retraction-watch.csv \
+            "https://gitlab.com/crossref/retraction-watch-data/-/raw/main/retraction_watch.csv?ref_type=heads"
+          gzip -f data/retraction-watch.csv
+          echo "Retraction Watch data size: $(du -h data/retraction-watch.csv.gz | cut -f1)"
+
       - name: Check for changes
         id: check_changes
         run: |
@@ -68,3 +75,4 @@ jobs:
           ls -la data/
           echo "Explorer data size: $(du -h data/explorer-data.json | cut -f1)"
           echo "Flora data size: $(du -h data/flora-data.json | cut -f1)"
+          echo "Retraction Watch data size: $(du -h data/retraction-watch.csv.gz | cut -f1)"
