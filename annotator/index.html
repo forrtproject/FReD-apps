@@ -30,6 +30,7 @@
           </div>
         </div>
         <nav class="header-nav">
+          <a href="#" class="header-nav-link" id="about-link">About</a>
           <a href="../explorer/index.html" class="header-nav-link">Explorer</a>
           <button class="theme-toggle" title="Toggle dark/light mode">
             <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -241,6 +242,44 @@ Smith, J. (2020). Study title. Journal Name. https://doi.org/10.1234/example
       </p>
     </div>
   </footer>
+
+  <!-- About Modal -->
+  <div class="modal-overlay" id="about-modal">
+    <div class="modal" style="max-width: 700px;">
+      <div class="modal-header">
+        <h3>About FLoRA Annotator</h3>
+        <button class="modal-close" onclick="document.getElementById('about-modal').classList.remove('active')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>
+          The <strong>FLoRA Annotator</strong> helps you identify which studies in a reference list, journal article or reading list 
+          have been replicated and what the outcomes were. It uses data from the 
+          <strong>FORRT Replication Database (FReD)</strong>, a comprehensive collection of replication studies in psychology and related fields.
+        </p>
+
+        <h4>How to use:</h4>
+        <ol>
+          <li><strong>Input References:</strong> Paste references with DOIs or upload a file (PDF, .bib, .ris, or .txt)</li>
+          <li><strong>Study Selection:</strong> Review matched studies from FReD and select additional ones to include</li>
+          <li><strong>Report:</strong> Generate an annotated report to share or save as HTML, Markdown, or PDF</li>
+        </ol>
+
+        <h4>Citation</h4>
+        <p id="citation" class="text-muted">Loading citation...</p>
+
+        <h4>Links</h4>
+        <ul>
+          <li><a href="https://forrt.org/replication-hub/" target="_blank">FORRT Replication Hub</a></li>
+          <li><a href="https://forrt.org/FReD/index.html" target="_blank">FReD R Package</a></li>
+          <li><a href="https://osf.io/9r62x/" target="_blank">FReD on OSF</a></li>
+          <li><a href="../explorer/index.html">FReD Explorer</a> - Browse and visualize the database</li>
+        </ul>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="document.getElementById('about-modal').classList.remove('active')">Close</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Welcome Modal -->
   <div class="modal-overlay" id="welcome-modal">
