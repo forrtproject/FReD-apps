@@ -51,6 +51,9 @@ FReD.annotator = {
       console.error('Failed to load data:', error);
       FReD.utils.showNotification('Failed to load data. Please try refreshing.', 'error');
     }
+
+    // Load citation
+    this.loadCitation();
   },
 
   /**
@@ -77,6 +80,27 @@ FReD.annotator = {
       }
       modal.classList.remove('active');
     });
+  },
+
+  /**
+   * Load citation from FReD-data repo
+   */
+  async loadCitation() {
+    const citationEl = document.getElementById('citation');
+    if (!citationEl) return;
+
+    try {
+      const response = await fetch('https://raw.githubusercontent.com/forrtproject/FReD-data/refs/heads/main/output/citation.txt');
+      if (response.ok) {
+        const citation = await response.text();
+        citationEl.textContent = citation.trim();
+      } else {
+        citationEl.textContent = 'Citation unavailable.';
+      }
+    } catch (error) {
+      console.error('Failed to load citation:', error);
+      citationEl.textContent = 'Citation unavailable.';
+    }
   },
 
   /**
@@ -181,6 +205,15 @@ FReD.annotator = {
     document.getElementById('btn-print')?.addEventListener('click', () => {
       window.print();
     });
+
+    // About modal link
+    const aboutLink = document.getElementById('about-link');
+    if (aboutLink) {
+      aboutLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.getElementById('about-modal')?.classList.add('active');
+      });
+    }
   },
 
   /**
