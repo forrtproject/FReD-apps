@@ -50,9 +50,9 @@ compute_all_outcomes <- function(row) {
   for (criterion in CRITERIA) {
     tryCatch({
       result <- assess_replication_outcome(
-        es_o = row$es_original,
+        es_o = row$es_o,
         n_o = row$n_o,
-        es_r = row$es_replication,
+        es_r = row$es_r,
         n_r = row$n_r,
         criterion = criterion
       )
@@ -124,8 +124,8 @@ compute_significance_outcome <- function(row) {
   pval_type_o <- row$pval_type_o
   pval_r <- row$pval_value_r
   pval_type_r <- row$pval_type_r
-  es_o <- row$es_original
-  es_r <- row$es_replication
+  es_o <- row$es_o
+  es_r <- row$es_r
   es_type_o <- row$es_type_o
 
   # Check if we can calculate
@@ -207,7 +207,7 @@ studies <- df %>%
     # Determine if direction is assessable for this entry
     direction_assessable = !is.na(es_type_o) &
                            tolower(es_type_o) %in% tolower(DIRECTIONAL_ES_TYPES) &
-                           !is.na(es_original) & !is.na(es_replication)
+                           !is.na(es_o) & !is.na(es_r)
   ) %>%
   transmute(
     id,
@@ -219,17 +219,17 @@ studies <- df %>%
     url_r,
     study_o,
     study_r,
-    es_o = es_original,
-    es_r = es_replication,
+    es_o = es_o,
+    es_r = es_r,
     es_type_o,
     n_o,
     n_r,
-    ci_lower_o = ci.lower_original,
-    ci_upper_o = ci.upper_original,
-    ci_lower_r = ci.lower_replication,
-    ci_upper_r = ci.upper_replication,
-    p_o = p_value_original,
-    p_r = p_value_replication,
+    ci_lower_o = ci.lower_o,
+    ci_upper_o = ci.upper_o,
+    ci_lower_r = ci.lower_r,
+    ci_upper_r = ci.upper_r,
+    p_o = p_value_o,
+    p_r = p_value_r,
     pval_value_o,
     pval_type_o,
     pval_value_r,
