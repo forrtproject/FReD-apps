@@ -209,9 +209,24 @@ FReD.charts.trends = {
       Object.keys(d.outcomes).forEach(o => allOutcomes.add(o));
     });
 
-    // Define outcome order for consistent legend
-    const outcomeOrder = ['success', 'Success', 'failure', 'Failure', 'mixed', 'Mixed',
-                          'OS not significant', 'Not calculable', 'not calculable'];
+    // Define outcome order for consistent legend.
+    // Covers labels across all success criteria, grouped successes -> failures ->
+    // mixed -> non-informative, so e.g. "Reported Success" keeps successful/failed
+    // left of mixed instead of falling back to alphabetical order.
+    const outcomeOrder = [
+      // successes
+      'success', 'successful', 'success (homogeneous and jointly significantly above 0)',
+      'statistically successful but flawed',
+      // failures
+      'failure', 'failed', 'informative failure', 'failure (reversal)',
+      'failure (not homogeneous but jointly significantly above 0)',
+      'failure (homogeneous but not significant)',
+      'failure (not homogeneous and not significant)',
+      // mixed (aggregated references with differing replication outcomes)
+      'mixed',
+      // non-informative / not assessable
+      'OS not significant', 'uninformative', 'descriptive only', 'not calculable'
+    ];
     const outcomes = [...allOutcomes].sort((a, b) => {
       const aIdx = outcomeOrder.findIndex(o => o.toLowerCase() === a.toLowerCase());
       const bIdx = outcomeOrder.findIndex(o => o.toLowerCase() === b.toLowerCase());
